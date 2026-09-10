@@ -4,6 +4,7 @@ import ContextMenu from './ContextMenu.jsx';
 import { useTrackSelection } from '../hooks/useTrackSelection.js';
 import { showToast } from '../toast.js';
 import { SORT_OPTIONS, sortTracks } from '../sort.js';
+import CoverMosaic from './CoverMosaic.jsx';
 import { IconPlay, IconTrash, IconImage } from './icons.jsx';
 
 const COVER_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
@@ -173,9 +174,7 @@ export default function PlaylistView({
               alt=""
             />
           ) : (
-            <div className="playlist-cover placeholder-large">
-              <IconImage />
-            </div>
+            <CoverMosaic tracks={tracks} className="playlist-cover" />
           )}
           <div className="playlist-cover-overlay">
             <IconImage />

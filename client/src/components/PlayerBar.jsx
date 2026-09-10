@@ -38,6 +38,41 @@ const REPEAT_TITLE = {
 
 const SLEEP_TIMER_OPTIONS = [15, 30, 45, 60];
 
+// audio.play() returns a promise that rejects for two very different
+// reasons: a benign AbortError (this exact play() got pre-empted by another
+// pause()/play() call racing it — happens constantly and isn't a real
+// failure) versus a real one (NotAllowedError: the browser's autoplay
+// policy blocked it because it doesn't think this call has a user gesture
+// behind it; NotSupportedError: it couldn't decode the file at all). These
+// calls used to swallow every rejection silently, which is exactly why a
+// real failure here looks identical to nothing happening — position stuck
+// at 0, no error anywhere. Surfacing the real ones (console + toast) is
+// what makes that failure mode diagnosable instead of silent.
+function tryPlay(audio) {
+  audio.play().catch((err) => {
+    if (err.name === 'AbortError') return;
+    console.error('MusicWeb: échec de la lecture audio —', err.name, err.message);
+    showToast(`Lecture impossible (${err.name}) — cliquez sur lecture pour réessayer.`);
+  });
+}
+
+const MEDIA_ERROR_MESSAGES = {
+  1: 'chargement interrompu',
+  2: 'erreur réseau',
+  3: 'erreur de décodage',
+  4: 'format non supporté par ce navigateur',
+};
+
+// A failure while *loading* the file (bad Range response, decode error,
+// unsupported codec) never reaches tryPlay() above at all — 'loadedmetadata'
+// simply never fires, so play() is never even attempted, and without this
+// the position just sits at 0 with no error anywhere. This is the other
+// half of the same silent-failure problem.
+function describeMediaError(audio) {
+  const code = audio.error?.code;
+  return code ? MEDIA_ERROR_MESSAGES[code] || `erreur ${code}` : 'erreur inconnue';
+}
+
 // The <audio> element always points at the single /api/stream broadcast.
 // The server closes every open connection on each track change (mp3/wav/opus
 // don't share a container, so it can't splice a new file into an open
@@ -51,7 +86,6 @@ const SLEEP_TIMER_OPTIONS = [15, 30, 45, 60];
 // position — the browser turns that into an HTTP Range request on its own.
 export default function PlayerBar({ state, onPause, onResume, onStop, onNext, onSeek, onShuffle, onRepeat, connected, listenerCount }) {
   const audioRef = useRef(null);
-  const progressRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [dragRatio, setDragRatio] = useState(null); // 0-1 while the user is dragging the progress bar, else null
 
@@ -83,20 +117,29 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
 
     const onLoadedMetadata = () => {
       if (state.positionSeconds > 1) audio.currentTime = state.positionSeconds;
-      if (state.isPlaying) audio.play().catch(() => {});
+      if (state.isPlaying) tryPlay(audio);
+    };
+    const onError = () => {
+      const message = describeMediaError(audio);
+      console.error('MusicWeb: échec du chargement audio —', message, audio.error);
+      showToast(`Impossible de charger « ${state.track?.title ?? 'cette piste'} » (${message}).`);
     };
 
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('error', onError);
     audio.load();
     setCurrentTime(0);
-    return () => audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+    return () => {
+      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('error', onError);
+    };
   }, [state.track?.id]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !state.track) return;
     if (state.isPlaying) {
-      audio.play().catch(() => {});
+      tryPlay(audio);
     } else {
       audio.pause();
     }
@@ -118,7 +161,7 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
     setOptimisticPlaying(next);
     const audio = audioRef.current;
     if (audio) {
-      if (next) audio.play().catch(() => {});
+      if (next) tryPlay(audio);
       else audio.pause();
     }
     if (next) onResume();
@@ -156,6 +199,7 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
   const displayTime = dragRatio !== null ? dragRatio * duration : currentTime;
 
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showNowPlaying, setShowNowPlaying] = useState(false);
 
   // Sleep timer: purely client-side (no server involvement) — it just calls
   // the same shared onPause() any client can call at any time, after a local
@@ -216,6 +260,7 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
     function handleKeyDown(e) {
       if (e.key === 'Escape') {
         setShowShortcuts(false);
+        setShowNowPlaying(false);
         return;
       }
       if (isTypingTarget()) return;
@@ -242,8 +287,15 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [state.track, duration, upcomingCount, onSeek, onNext, volume]);
 
+  // Reads the geometry off e.currentTarget rather than a ref: progressJSX
+  // below is reused for both the compact bar and the full-screen overlay
+  // (see controlsJSX/progressJSX comment), so at any moment there can be two
+  // separate progress-track elements mounted from the same JSX — a single
+  // ref would only ever point at the last one rendered, breaking drag math
+  // on the other. currentTarget is always the specific element the pointer
+  // event actually fired on, so this works correctly for either one.
   function ratioFromPointer(e) {
-    const rect = progressRef.current.getBoundingClientRect();
+    const rect = e.currentTarget.getBoundingClientRect();
     return Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
   }
 
@@ -265,15 +317,81 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
     onSeek(ratio * duration);
   }
 
+  // Shared between the compact bar and the full-screen "now playing" overlay
+  // (see showNowPlaying below) — same buttons/handlers either way, only the
+  // surrounding CSS context makes them bigger there.
+  const controlsJSX = (
+    <div className="player-controls">
+      <button
+        className={`control-button ${state.shuffle ? 'toggled' : ''}`}
+        onClick={() => onShuffle(!state.shuffle)}
+        title={state.shuffle ? 'Désactiver la lecture aléatoire' : 'Lecture aléatoire'}
+      >
+        <IconShuffle />
+      </button>
+      <button
+        className={`control-button repeat-button ${state.repeat !== 'off' ? 'toggled' : ''}`}
+        onClick={() => onRepeat(NEXT_REPEAT_MODE[state.repeat])}
+        title={REPEAT_TITLE[state.repeat]}
+      >
+        <IconRepeat />
+        {state.repeat === 'one' && <span className="repeat-one-badge">1</span>}
+      </button>
+      <button
+        className="control-button play-pause"
+        onClick={handlePlayPause}
+        disabled={!state.track}
+        title={optimisticPlaying ? 'Pause' : 'Lecture'}
+      >
+        {optimisticPlaying ? <IconPause /> : <IconPlay />}
+      </button>
+      <button className="control-button" onClick={onNext} disabled={upcomingCount === 0} title="Suivant">
+        <IconNext />
+      </button>
+      <button className="control-button" onClick={onStop} disabled={!state.track} title="Arrêter">
+        <IconStop />
+      </button>
+    </div>
+  );
+
+  const progressJSX = (
+    <div className="progress-row">
+      <span className="time">{formatTime(displayTime)}</span>
+      <div
+        className={`progress-track ${state.track ? 'seekable' : ''} ${dragRatio !== null ? 'dragging' : ''}`}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
+        <div className="waveform-bars">
+          {barLevels.map((level, i) => (
+            <span
+              key={i}
+              className={(i / barLevels.length) * 100 <= progress ? 'played' : ''}
+              style={{ height: `${8 + Math.round(level * 92)}%` }}
+            />
+          ))}
+        </div>
+        <div className="progress-thumb" style={{ left: `${progress}%` }} />
+      </div>
+      <span className="time">{formatTime(duration)}</span>
+    </div>
+  );
+
+  const coverUrl = state.track?.hasCover ? `/api/tracks/${state.track.id}/cover` : null;
+
   return (
     <footer className="player-bar">
       <audio ref={audioRef} src="/api/stream" preload="none" />
 
-      <div className="player-track-info">
+      <div
+        className={`player-track-info ${state.track ? 'clickable' : ''}`}
+        onClick={() => state.track && setShowNowPlaying(true)}
+      >
         {state.track ? (
           <>
-            {state.track.hasCover ? (
-              <img className="player-cover" src={`/api/tracks/${state.track.id}/cover`} alt="" />
+            {coverUrl ? (
+              <img className="player-cover" src={coverUrl} alt="" />
             ) : (
               <div className="player-cover placeholder">
                 <IconMusicNote />
@@ -290,59 +408,8 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
       </div>
 
       <div className="player-center">
-        <div className="player-controls">
-          <button
-            className={`control-button ${state.shuffle ? 'toggled' : ''}`}
-            onClick={() => onShuffle(!state.shuffle)}
-            title={state.shuffle ? 'Désactiver la lecture aléatoire' : 'Lecture aléatoire'}
-          >
-            <IconShuffle />
-          </button>
-          <button
-            className={`control-button repeat-button ${state.repeat !== 'off' ? 'toggled' : ''}`}
-            onClick={() => onRepeat(NEXT_REPEAT_MODE[state.repeat])}
-            title={REPEAT_TITLE[state.repeat]}
-          >
-            <IconRepeat />
-            {state.repeat === 'one' && <span className="repeat-one-badge">1</span>}
-          </button>
-          <button
-            className="control-button play-pause"
-            onClick={handlePlayPause}
-            disabled={!state.track}
-            title={optimisticPlaying ? 'Pause' : 'Lecture'}
-          >
-            {optimisticPlaying ? <IconPause /> : <IconPlay />}
-          </button>
-          <button className="control-button" onClick={onNext} disabled={upcomingCount === 0} title="Suivant">
-            <IconNext />
-          </button>
-          <button className="control-button" onClick={onStop} disabled={!state.track} title="Arrêter">
-            <IconStop />
-          </button>
-        </div>
-        <div className="progress-row">
-          <span className="time">{formatTime(displayTime)}</span>
-          <div
-            ref={progressRef}
-            className={`progress-track ${state.track ? 'seekable' : ''} ${dragRatio !== null ? 'dragging' : ''}`}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-          >
-            <div className="waveform-bars">
-              {barLevels.map((level, i) => (
-                <span
-                  key={i}
-                  className={(i / barLevels.length) * 100 <= progress ? 'played' : ''}
-                  style={{ height: `${8 + Math.round(level * 92)}%` }}
-                />
-              ))}
-            </div>
-            <div className="progress-thumb" style={{ left: `${progress}%` }} />
-          </div>
-          <span className="time">{formatTime(duration)}</span>
-        </div>
+        {controlsJSX}
+        {progressJSX}
       </div>
 
       <div className="player-status">
@@ -410,6 +477,32 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
             <button className="icon-button shortcuts-close" onClick={() => setShowShortcuts(false)} title="Fermer">
               ×
             </button>
+          </div>
+        </div>
+      )}
+
+      {showNowPlaying && state.track && (
+        <div className="now-playing-overlay" onClick={() => setShowNowPlaying(false)}>
+          {coverUrl && <div className="now-playing-bg" style={{ backgroundImage: `url(${coverUrl})` }} />}
+          <div className="now-playing-panel" onClick={(e) => e.stopPropagation()}>
+            <button className="icon-button now-playing-close" onClick={() => setShowNowPlaying(false)} title="Fermer">
+              ×
+            </button>
+            <div className="now-playing-cover">
+              {coverUrl ? (
+                <img src={coverUrl} alt="" />
+              ) : (
+                <div className="now-playing-cover-placeholder">
+                  <IconMusicNote />
+                </div>
+              )}
+            </div>
+            <div className="now-playing-text">
+              <span className="now-playing-title">{state.track.title}</span>
+              {state.track.artist && <span className="now-playing-artist">{state.track.artist}</span>}
+            </div>
+            {progressJSX}
+            {controlsJSX}
           </div>
         </div>
       )}

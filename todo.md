@@ -6,12 +6,12 @@ Confort utilisateur
 - Recherche globale (Ctrl/Cmd+K) couvrant morceaux + playlists, pas seulement le filtre local de Library.jsx.
 - Message de reconnexion plus explicite qu'un simple point de couleur (connection-dot) en cas de perte WS prolongée.
 
-Design
-- Vue Albums/Artistes en grille de pochettes (déjà proposée) — transforme la bibliothèque en expérience visuelle plutôt qu'une liste de texte.
-- Vue "Lecture en cours" plein écran (déjà proposée), avec fond flou basé sur la cover.
-- Mosaïque de 4 pochettes en aperçu de playlist quand aucune cover n'est uploadée, au lieu du placeholder générique actuel.
-- Sidebar avec sections repliables (Bibliothèque / Playlists / File d'attente) si le nombre de playlists grandit — actuellement tout est à plat.
-- Couleur d'accent personnalisable (--accent est du vert Spotify #1db954) — un sélecteur de thème pour se démarquer visuellement du clone.
+Design (fait)
+- Vue Albums/Artistes en grille de pochettes dans Library.jsx (bouton Liste/Albums/Artistes) — regroupement client par tag album/artiste, clic sur une tuile pour un détail façon mini-playlist (CoverMosaic.jsx pour les tuiles sans pochette unique).
+- Mosaïque de 4 pochettes (CoverMosaic.jsx, réutilisé par PlaylistView.jsx et les tuiles Artistes) quand aucune cover n'est uploadée, au lieu du placeholder générique.
+- Vue "Lecture en cours" plein écran dans PlayerBar.jsx (clic sur la pochette/titre), fond flou basé sur la cover (filter: blur sur une copie agrandie de l'image).
+- Sidebar : section Playlists repliable (chevron, état persisté dans localStorage) — Bibliothèque/File d'attente/Titres likés restent des liens simples, rien à y replier.
+- Couleur d'accent personnalisable (useAccent.js, 5 teintes prédéfinies) — uniquement en thème sombre, même règle que le fond ambiant basé sur la cover dans App.jsx ; le thème clair garde sa palette café fixe.
 
 Boutons utiles (fait)
 - Bouton répéter (off / all / one) dans PlayerBar.jsx — off arrête la boucle de defaultQueue après un passage complet, one répète la piste en cours indéfiniment (playbackState.js `repeat`, WS `repeat`).

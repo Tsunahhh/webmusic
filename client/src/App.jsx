@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSocket } from './hooks/useSocket.js';
 import { useTheme } from './hooks/useTheme.js';
+import { useAccent } from './hooks/useAccent.js';
 import { useDominantColor } from './hooks/useDominantColor.js';
 import { isTypingTarget } from './keyboard.js';
 import { showToast } from './toast.js';
@@ -18,6 +19,7 @@ import { IconMenu } from './components/icons.jsx';
 export default function App() {
   const { state, connected, send, listenerCount } = useSocket();
   const [theme, toggleTheme] = useTheme();
+  const [accentId, setAccentId] = useAccent(theme);
   const [playlists, setPlaylists] = useState([]);
   const [view, setView] = useState({ type: 'library' });
   // Just the ids, for a cheap sidebar count and for TrackRow's heart icon —
@@ -211,6 +213,8 @@ export default function App() {
         likedCount={likedIds.size}
         theme={theme}
         onToggleTheme={toggleTheme}
+        accentId={accentId}
+        onAccentChange={setAccentId}
         onOpenSearch={() => setSearchOpen(true)}
         onSelectLibrary={() => selectView({ type: 'library' })}
         onSelectQueue={() => selectView({ type: 'queue' })}
