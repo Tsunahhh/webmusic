@@ -1,5 +1,6 @@
 import { getTrack } from './library.js';
 import { startBroadcast, pauseBroadcast, resumeBroadcast, stopBroadcast } from './broadcast.js';
+import { recordPlay } from './history.js';
 
 const state = {
   track: null, // row from tracks table
@@ -15,6 +16,11 @@ const state = {
   baseOrder: [], // the full canonical (unshuffled) track id list for the current context, fixed at
                  // playQueue() time and never mutated afterward — shuffle on/off is derived from this.
   shuffle: false, // a standing preference — survives track/context changes, not reset by stop()
+  crossfadeSeconds: 0, // 0 = off. Shared, not per-device, and that is the whole point: a client
+                       // that overlapped tracks on its own would run ahead of the server's timeline
+                       // by exactly this much and drift out of sync with every other speaker. Shared,
+                       // the server advances early by the same amount, so every device switches
+                       // together and each one just plays the outgoing track's tail locally.
   repeat: 'all', // 'off' | 'all' | 'one' — also a standing preference, like shuffle. 'all' is the
                  // original always-on defaultQueue loop; 'off' stops pushing a finished 'queue' track
                  // back once the context has played through; 'one' repeats the current track forever
@@ -63,10 +69,25 @@ function clearAdvanceTimer() {
 // and repeat 'off' still needs the natural end detected so advanceQueue can
 // call stop() — skipping this when nothing's upcoming used to just leave
 // position counting up past the track's own duration forever.
+//
+// A paused track has no "end" coming, so no timer is armed while
+// isPlaying is false. That guard lives here rather than in each caller
+// because seek() and enqueueNext() both run happily during a pause: without
+// it, scrubbing (or queuing a track) while paused armed a timer that later
+// fired advanceQueue() on its own, which restarts playback — for *every*
+// device, since there's one shared session. resume() reschedules from the
+// real remaining time, so nothing is lost by not arming it here.
+// Crossfade moves this earlier by its own length: the switch has to happen
+// while the outgoing track still has that many seconds of audio left, since
+// that tail is what the clients fade out against the incoming track (see
+// PlayerBar.jsx). A crossfade longer than the track itself would mean
+// advancing before it started, so it's ignored in that case.
 function scheduleAdvance() {
   clearAdvanceTimer();
+  if (!state.isPlaying) return;
   if (!state.track?.duration) return;
-  const remaining = state.track.duration - state.elapsedBeforeStart;
+  const lead = state.crossfadeSeconds < state.track.duration ? state.crossfadeSeconds : 0;
+  const remaining = state.track.duration - state.elapsedBeforeStart - lead;
   advanceTimer = setTimeout(() => advanceQueue(true), Math.max(remaining, 0) * 1000);
 }
 
@@ -77,6 +98,10 @@ function startTrack(track, source) {
   state.startedAt = Date.now();
   state.elapsedBeforeStart = 0;
   startBroadcast(track);
+  // Every path that starts a track funnels through here — manual play, queue
+  // auto-advance, a repeat-one restart — so this is the single place the
+  // "Écouté récemment" view needs to be fed from.
+  recordPlay(track.id);
   scheduleAdvance();
 }
 
@@ -126,6 +151,7 @@ export function getState() {
     positionSeconds,
     shuffle: state.shuffle,
     repeat: state.repeat,
+    crossfadeSeconds: state.crossfadeSeconds,
     upNext: state.upNext.map((id) => getTrack.get(id)).filter(Boolean),
     queue: state.defaultQueue.map((id) => getTrack.get(id)).filter(Boolean),
   };
@@ -203,11 +229,23 @@ export function setShuffle(enabled) {
 export function setRepeat(mode) {
   if (!['off', 'all', 'one'].includes(mode)) return;
   state.repeat = mode;
-  // Switching into/out of 'one' changes whether scheduleAdvance() should run
-  // with nothing queued (see its own comment) — only meaningful while
-  // actually playing; pause() already cleared the timer, and resume()/seek()
-  // will reschedule it correctly on their own.
-  if (state.isPlaying) scheduleAdvance();
+  // Switching into/out of 'one' changes whether the pending timer should
+  // restart this track or move on (see advanceQueue), so it needs
+  // re-arming — scheduleAdvance() is itself a no-op while paused.
+  scheduleAdvance();
+  notify();
+}
+
+const MAX_CROSSFADE_SECONDS = 12;
+
+// A standing preference like shuffle and repeat — survives track and context
+// changes, and isn't reset by stop().
+export function setCrossfade(seconds) {
+  if (!Number.isFinite(seconds)) return;
+  state.crossfadeSeconds = Math.min(Math.max(seconds, 0), MAX_CROSSFADE_SECONDS);
+  // The pending advance was sized against the old value, so it has to be
+  // re-armed; a no-op while paused (see scheduleAdvance).
+  scheduleAdvance();
   notify();
 }
 

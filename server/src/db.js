@@ -36,6 +36,21 @@ db.exec(`
     position INTEGER NOT NULL,
     PRIMARY KEY (playlist_id, track_id)
   );
+
+  -- One row per time a track started playing (see recordPlay in history.js),
+  -- not one row per track: the same track played twice is two rows, which is
+  -- what makes "recently played" ordering possible at all. ON DELETE CASCADE
+  -- so removing a track from the library takes its history with it rather
+  -- than leaving rows that join to nothing.
+  CREATE TABLE IF NOT EXISTS play_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    played_at INTEGER NOT NULL
+  );
+
+  -- Every read of this table is "most recent first" and every prune is
+  -- "oldest rows"; both are a plain ordered scan without it.
+  CREATE INDEX IF NOT EXISTS idx_play_history_played_at ON play_history (played_at DESC);
 `);
 
 // `playlists` predates cover support — CREATE TABLE IF NOT EXISTS won't add
