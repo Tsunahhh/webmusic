@@ -13,6 +13,7 @@ import {
   reorderUpNext,
   setShuffle,
   setRepeat,
+  setCrossfade,
   onChange,
 } from './playbackState.js';
 
@@ -33,6 +34,11 @@ let wss = null;
 // this" (see useSocket.js) even though there's no concept of a host client —
 // any client can control playback for everyone.
 let currentOriginId = null;
+// The origin socket's self-chosen name, captured alongside its id for the
+// same broadcast. Read off the socket at message time rather than looked up
+// later, because by the time a client renders the toast the socket may
+// already be gone — a device can start a track and immediately close its tab.
+let currentOriginName = null;
 
 // wss.clients includes sockets mid-handshake/closing, not just fully OPEN
 // ones — counting only OPEN ones is what "how many devices are actually
@@ -50,6 +56,7 @@ function broadcastState() {
     type: 'state',
     state: getState(),
     originClientId: currentOriginId,
+    originClientName: currentOriginName,
     listenerCount: listenerCount(),
   });
   for (const client of wss.clients) {
@@ -87,8 +94,18 @@ export function attachWsServer(httpServer) {
       }
 
       currentOriginId = socket.id;
+      currentOriginName = socket.deviceName ?? null;
       try {
         switch (msg.type) {
+          // Purely a label this socket carries for other clients' toasts
+          // ("Thomas a lancé X" instead of "Un autre appareil a lancé X").
+          // It changes nothing about playback, so it deliberately doesn't
+          // notify/rebroadcast — the name is only ever read at the moment
+          // this socket causes some *other* change. Trimmed and capped
+          // because it goes straight into a toast on every device.
+          case 'identify':
+            socket.deviceName = typeof msg.name === 'string' ? msg.name.trim().slice(0, 32) || null : null;
+            break;
           case 'playQueue':
             playQueue(msg.trackIds);
             break;
@@ -122,6 +139,9 @@ export function attachWsServer(httpServer) {
           case 'repeat':
             setRepeat(msg.mode);
             break;
+          case 'crossfade':
+            setCrossfade(Number(msg.seconds));
+            break;
           default:
             return;
         }
@@ -129,6 +149,7 @@ export function attachWsServer(httpServer) {
         socket.send(JSON.stringify({ type: 'error', message: err.message }));
       } finally {
         currentOriginId = null;
+        currentOriginName = null;
       }
     });
   });

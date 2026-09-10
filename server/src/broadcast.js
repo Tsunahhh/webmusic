@@ -1,6 +1,6 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { musicDir } from './library.js';
+import { openRangeStream, contentTypeFor } from './fileRange.js';
 
 // Each subscriber gets its own fs.createReadStream piped straight to its
 // response — not a shared byte-for-byte fan-out. A local file read finishes
@@ -18,19 +18,9 @@ import { musicDir } from './library.js';
 // metadata has loaded — the browser converts that to a Range request on its
 // own, the same way any HTML5 audio/video seeking works.
 
-const MIME_TYPES = {
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.opus': 'audio/ogg; codecs=opus',
-};
-
 let currentTrack = null;
 let paused = false;
 const subscribers = new Map(); // res -> its own read stream
-
-function contentTypeFor(track) {
-  return MIME_TYPES[path.extname(track.filename).toLowerCase()] || 'application/octet-stream';
-}
 
 function attachStream(res, readStream) {
   subscribers.set(res, readStream);
@@ -84,8 +74,6 @@ export function stopBroadcast() {
   paused = false;
 }
 
-const RANGE_RE = /^bytes=(\d*)-(\d*)$/;
-
 export function subscribe(req, res) {
   if (!currentTrack) {
     res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
@@ -93,27 +81,9 @@ export function subscribe(req, res) {
     return;
   }
 
+  // no-store, unlike the per-track route: this URL's *meaning* changes every
+  // time the shared session moves on, so a cached copy would be the wrong song.
   const filePath = path.join(musicDir, currentTrack.filename);
-  const { size } = fs.statSync(filePath);
-
-  let start = 0;
-  let end = size - 1;
-  let status = 200;
-  const match = req.headers.range && RANGE_RE.exec(req.headers.range);
-  if (match) {
-    if (match[1]) start = parseInt(match[1], 10);
-    if (match[2]) end = parseInt(match[2], 10);
-    status = 206;
-  }
-
-  res.writeHead(status, {
-    'Content-Type': contentTypeFor(currentTrack),
-    'Accept-Ranges': 'bytes',
-    'Content-Length': end - start + 1,
-    'Cache-Control': 'no-store',
-    ...(status === 206 ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}),
-  });
-
-  const readStream = fs.createReadStream(filePath, { start, end });
-  attachStream(res, readStream);
+  const readStream = openRangeStream(req, res, filePath, contentTypeFor(currentTrack.filename));
+  if (readStream) attachStream(res, readStream);
 }

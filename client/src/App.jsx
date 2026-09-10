@@ -1,24 +1,38 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSocket } from './hooks/useSocket.js';
 import { useTheme } from './hooks/useTheme.js';
+import { useDeviceName } from './hooks/useDeviceName.js';
 import { useAccent } from './hooks/useAccent.js';
-import { useDominantColor } from './hooks/useDominantColor.js';
+import { useCoverPalette } from './hooks/useCoverPalette.js';
+import { useIdle } from './hooks/useIdle.js';
+import { useDisplaySettings } from './hooks/useDisplaySettings.js';
 import { isTypingTarget } from './keyboard.js';
 import { showToast } from './toast.js';
 import Sidebar from './components/Sidebar.jsx';
 import Library from './components/Library.jsx';
 import PlaylistView from './components/PlaylistView.jsx';
 import LikedView from './components/LikedView.jsx';
+import HistoryView from './components/HistoryView.jsx';
 import QueueView from './components/QueueView.jsx';
 import PlayerBar from './components/PlayerBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import GlobalSearch from './components/GlobalSearch.jsx';
 import ReconnectBanner from './components/ReconnectBanner.jsx';
+import AmbientMode from './components/AmbientMode.jsx';
+import JoinQr from './components/JoinQr.jsx';
+import DisplaySettings from './components/DisplaySettings.jsx';
 import { IconMenu } from './components/icons.jsx';
 
+// Long enough that it never interrupts someone browsing the library, short
+// enough that a screen left alone in a living room settles into the ambient
+// display within a song or two.
+const AMBIENT_DELAY_MS = 3 * 60 * 1000;
+
 export default function App() {
-  const { state, connected, send, listenerCount } = useSocket();
+  const [deviceName, setDeviceName] = useDeviceName();
+  const { state, connected, send, listenerCount } = useSocket(deviceName);
   const [theme, toggleTheme] = useTheme();
+  const { settings: display, update: updateDisplay, reset: resetDisplay, warmActive } = useDisplaySettings();
   const [accentId, setAccentId] = useAccent(theme);
   const [playlists, setPlaylists] = useState([]);
   const [view, setView] = useState({ type: 'library' });
@@ -57,15 +71,26 @@ export default function App() {
   // whatever — which clashes with the light theme's deliberately calm,
   // fixed coffee palette; the dark/neon theme has no such constraint).
   const coverUrl = state.track?.hasCover ? `/api/tracks/${state.track.id}/cover` : null;
-  const ambient = useDominantColor(coverUrl);
-  const mainStyle =
-    ambient && theme === 'dark'
-      ? { backgroundImage: `linear-gradient(180deg, rgba(${ambient.r}, ${ambient.g}, ${ambient.b}, 0.5) 0%, var(--bg-main) 340px)` }
-      : undefined;
+  const palette = useCoverPalette(coverUrl);
+  // The gradient itself lives in CSS (see .main.ambient-mesh in index.css) and
+  // only the three colors come from here, as custom properties. That split is
+  // what makes the cross-fade between tracks possible: --ambient-N is
+  // registered with @property as a <color>, so it can be transitioned, which a
+  // whole background-image built inline never could.
+  // High contrast opts out entirely: a colored wash over the content is the
+  // opposite of what that mode is for.
+  const tinted = palette && theme === 'dark' && !display.highContrast && display.ambientIntensity > 0;
+  const mainStyle = tinted
+    ? Object.fromEntries(
+        palette.map((c, i) => [`--ambient-${i + 1}`, `rgba(${c.r}, ${c.g}, ${c.b}, ${display.ambientIntensity})`])
+      )
+    : undefined;
   // Off-canvas on narrow viewports only (see the .sidebar CSS media query) —
   // the sidebar stays permanently visible on desktop regardless of this flag.
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [displayOpen, setDisplayOpen] = useState(false);
 
   // Picking a destination should also close the mobile drawer — otherwise
   // it'd keep covering the view that just changed underneath it.
@@ -137,6 +162,28 @@ export default function App() {
     });
   }
 
+  // Always creates a new playlist (see the import route) — importing twice
+  // gives two playlists, which is undoable, unlike a silent merge into one the
+  // user already had.
+  async function importPlaylist(file) {
+    const body = new FormData();
+    body.append('file', file);
+    const res = await fetch('/api/playlists/import', { method: 'POST', body });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(data.error || 'Import impossible');
+      return;
+    }
+    refreshPlaylists();
+    setView({ type: 'playlist', id: data.playlist.id });
+    // The unmatched count is the part worth surfacing: an import that silently
+    // dropped half its entries would otherwise just look like a short playlist.
+    const parts = [`${data.imported} piste${data.imported > 1 ? 's' : ''} importée${data.imported > 1 ? 's' : ''}`];
+    if (data.unmatched > 0) parts.push(`${data.unmatched} introuvable${data.unmatched > 1 ? 's' : ''} dans la bibliothèque`);
+    if (data.duplicates > 0) parts.push(`${data.duplicates} doublon${data.duplicates > 1 ? 's' : ''} ignoré${data.duplicates > 1 ? 's' : ''}`);
+    showToast(parts.join(' · '));
+  }
+
   async function renamePlaylist(id, name) {
     await fetch(`/api/playlists/${id}`, {
       method: 'PATCH',
@@ -175,6 +222,12 @@ export default function App() {
   }
 
   const upcomingCount = state.upNext.length + state.queue.length;
+
+  // Only meaningful while something is actually playing: an ambient display
+  // over a stopped player would just be a clock covering the UI. Passing that
+  // as `enabled` also means playback stopping drops out of ambient mode on
+  // its own, without a separate effect to tear it down.
+  const ambientIdle = useIdle(AMBIENT_DELAY_MS, Boolean(state.track) && state.isPlaying);
 
   // Spacebar play/pause — the one keyboard shortcut every media player has.
   // Ignored while typing in an input/textarea so it doesn't fight with text
@@ -219,14 +272,27 @@ export default function App() {
         onSelectLibrary={() => selectView({ type: 'library' })}
         onSelectQueue={() => selectView({ type: 'queue' })}
         onSelectLiked={() => selectView({ type: 'liked' })}
+        onSelectHistory={() => selectView({ type: 'history' })}
         onSelectPlaylist={(id) => selectView({ type: 'playlist', id })}
         onCreatePlaylist={createPlaylist}
         onDeletePlaylist={deletePlaylist}
         onRenamePlaylist={renamePlaylist}
         onDropTrack={addTracksToPlaylist}
+        onDropQueue={enqueueNext}
+        onImportPlaylist={importPlaylist}
+        deviceName={deviceName}
+        onDeviceNameChange={setDeviceName}
+        onOpenJoin={() => {
+          setJoinOpen(true);
+          setSidebarOpen(false);
+        }}
+        onOpenDisplay={() => {
+          setDisplayOpen(true);
+          setSidebarOpen(false);
+        }}
       />
 
-      <main className="main" style={mainStyle}>
+      <main className={`main ${tinted ? 'ambient-mesh' : ''}`} style={mainStyle}>
         {view.type === 'library' && (
           <Library
             currentTrackId={state.track?.id}
@@ -263,6 +329,17 @@ export default function App() {
             onToggleLike={toggleLike}
           />
         )}
+        {view.type === 'history' && (
+          <HistoryView
+            currentTrackId={state.track?.id}
+            isPlaying={state.isPlaying}
+            onPlay={playQueue}
+            onEnqueue={enqueueNext}
+            playlists={playlists}
+            onAddToPlaylist={addTracksToPlaylist}
+            onToggleLike={toggleLike}
+          />
+        )}
         {view.type === 'queue' && (
           <QueueView
             state={state}
@@ -276,6 +353,8 @@ export default function App() {
         state={state}
         connected={connected}
         listenerCount={listenerCount}
+        liked={Boolean(state.track && likedIds.has(state.track.id))}
+        onToggleLike={toggleLike}
         onPause={() => send('pause')}
         onResume={() => send('resume')}
         onStop={() => send('stop')}
@@ -283,6 +362,7 @@ export default function App() {
         onSeek={(positionSeconds) => send('seek', { positionSeconds })}
         onShuffle={(enabled) => send('shuffle', { enabled })}
         onRepeat={(mode) => send('repeat', { mode })}
+        onCrossfade={(seconds) => send('crossfade', { seconds })}
       />
 
       <GlobalSearch
@@ -292,6 +372,26 @@ export default function App() {
         onPlayTrack={playQueue}
         onSelectPlaylist={(id) => selectView({ type: 'playlist', id })}
       />
+
+      {ambientIdle && state.track && <AmbientMode track={state.track} />}
+
+      <JoinQr open={joinOpen} onClose={() => setJoinOpen(false)} />
+
+      <DisplaySettings
+        open={displayOpen}
+        onClose={() => setDisplayOpen(false)}
+        settings={display}
+        onChange={updateDisplay}
+        onReset={resetDisplay}
+        theme={theme}
+        crossfadeSeconds={state.crossfadeSeconds ?? 0}
+        onCrossfadeChange={(seconds) => send('crossfade', { seconds })}
+      />
+
+      {/* Sits above everything, including the ambient screensaver, and never
+          takes pointer events — it's a filter over the screen, not a layer of
+          the UI. */}
+      {warmActive && <div className="warm-overlay" style={{ opacity: display.warmStrength }} />}
 
       <ToastHost />
     </div>

@@ -3,6 +3,9 @@ import { formatTime } from '../format.js';
 import { isTypingTarget } from '../keyboard.js';
 import { showToast } from '../toast.js';
 import { useTrackWaveform } from '../hooks/useTrackWaveform.js';
+import { useMediaSession } from '../hooks/useMediaSession.js';
+import { useAudioAnalyser, BAR_COUNT } from '../hooks/useAudioAnalyser.js';
+import { useAudioDecks } from '../hooks/useAudioDecks.js';
 import {
   IconPlay,
   IconPause,
@@ -16,6 +19,7 @@ import {
   IconHelp,
   IconTimer,
   IconHeadphones,
+  IconHeart,
 } from './icons.jsx';
 
 const SHORTCUTS = [
@@ -38,55 +42,17 @@ const REPEAT_TITLE = {
 
 const SLEEP_TIMER_OPTIONS = [15, 30, 45, 60];
 
-// audio.play() returns a promise that rejects for two very different
-// reasons: a benign AbortError (this exact play() got pre-empted by another
-// pause()/play() call racing it — happens constantly and isn't a real
-// failure) versus a real one (NotAllowedError: the browser's autoplay
-// policy blocked it because it doesn't think this call has a user gesture
-// behind it; NotSupportedError: it couldn't decode the file at all). These
-// calls used to swallow every rejection silently, which is exactly why a
-// real failure here looks identical to nothing happening — position stuck
-// at 0, no error anywhere. Surfacing the real ones (console + toast) is
-// what makes that failure mode diagnosable instead of silent.
-function tryPlay(audio) {
-  audio.play().catch((err) => {
-    if (err.name === 'AbortError') return;
-    console.error('MusicWeb: échec de la lecture audio —', err.name, err.message);
-    showToast(`Lecture impossible (${err.name}) — cliquez sur lecture pour réessayer.`);
-  });
-}
+// Shared by the arrow-key shortcuts and the OS media controls'
+// seek-backward/forward actions (see useMediaSession.js), so a nudge is the
+// same distance wherever it's triggered from.
+const SEEK_STEP_SECONDS = 5;
 
-const MEDIA_ERROR_MESSAGES = {
-  1: 'chargement interrompu',
-  2: 'erreur réseau',
-  3: 'erreur de décodage',
-  4: 'format non supporté par ce navigateur',
-};
-
-// A failure while *loading* the file (bad Range response, decode error,
-// unsupported codec) never reaches tryPlay() above at all — 'loadedmetadata'
-// simply never fires, so play() is never even attempted, and without this
-// the position just sits at 0 with no error anywhere. This is the other
-// half of the same silent-failure problem.
-function describeMediaError(audio) {
-  const code = audio.error?.code;
-  return code ? MEDIA_ERROR_MESSAGES[code] || `erreur ${code}` : 'erreur inconnue';
-}
-
-// The <audio> element always points at the single /api/stream broadcast.
-// The server closes every open connection on each track change (mp3/wav/opus
-// don't share a container, so it can't splice a new file into an open
-// response) — so a track-id change here must call audio.load() to open a
-// fresh HTTP request and pick up the new Content-Type, not just toggle play.
-//
-// Joining a track already in progress (e.g. opening the page mid-song) is
-// handled by seeking, not by asking the server for a mid-file byte offset:
-// the server always serves the file from byte 0 so the browser gets a valid
-// header, and once metadata has loaded we set audio.currentTime to the live
-// position — the browser turns that into an HTTP Range request on its own.
-export default function PlayerBar({ state, onPause, onResume, onStop, onNext, onSeek, onShuffle, onRepeat, connected, listenerCount }) {
-  const audioRef = useRef(null);
-  const [currentTime, setCurrentTime] = useState(0);
+// The two <audio> elements live here, but everything about *when* each one
+// loads, plays, seeks and fades belongs to useAudioDecks.js — including why
+// there are two of them (a crossfade needs the outgoing track still sounding
+// under the incoming one) and why the crossfade length comes from the shared
+// playback state rather than a local preference.
+export default function PlayerBar({ state, onPause, onResume, onStop, onNext, onSeek, onShuffle, onRepeat, onCrossfade, connected, listenerCount, liked, onToggleLike }) {
   const [dragRatio, setDragRatio] = useState(null); // 0-1 while the user is dragging the progress bar, else null
 
   // Volume is per-device (each speaker/browser tab controls its own), not
@@ -107,43 +73,19 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
     setVolume(volume > 0 ? 0 : lastVolumeRef.current);
   }
 
-  useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume;
-  }, [volume]);
+  // Whatever the shared queue says comes next — what the idle deck preloads
+  // and what a crossfade fades into. Null with nothing queued, which just
+  // means no preload and a plain stop at the end.
+  const nextTrackId = state.upNext[0]?.id ?? state.queue[0]?.id ?? null;
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !state.track) return;
-
-    const onLoadedMetadata = () => {
-      if (state.positionSeconds > 1) audio.currentTime = state.positionSeconds;
-      if (state.isPlaying) tryPlay(audio);
-    };
-    const onError = () => {
-      const message = describeMediaError(audio);
-      console.error('MusicWeb: échec du chargement audio —', message, audio.error);
-      showToast(`Impossible de charger « ${state.track?.title ?? 'cette piste'} » (${message}).`);
-    };
-
-    audio.addEventListener('loadedmetadata', onLoadedMetadata);
-    audio.addEventListener('error', onError);
-    audio.load();
-    setCurrentTime(0);
-    return () => {
-      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
-      audio.removeEventListener('error', onError);
-    };
-  }, [state.track?.id]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !state.track) return;
-    if (state.isPlaying) {
-      tryPlay(audio);
-    } else {
-      audio.pause();
-    }
-  }, [state.isPlaying]);
+  const { deckRefs, activeRef, currentTime, getActiveAudio } = useAudioDecks({
+    track: state.track,
+    isPlaying: state.isPlaying,
+    positionSeconds: state.positionSeconds,
+    crossfadeSeconds: state.crossfadeSeconds ?? 0,
+    nextTrackId,
+    volume,
+  });
 
   // Optimistic play/pause: the icon (and the audio element itself) flips
   // the instant *this* client clicks, instead of waiting on the WS
@@ -155,38 +97,22 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
   const [optimisticPlaying, setOptimisticPlaying] = useState(state.isPlaying);
   useEffect(() => setOptimisticPlaying(state.isPlaying), [state.isPlaying]);
 
-  function handlePlayPause() {
+  // Directional rather than a toggle, because the OS media controls send
+  // distinct play and pause actions (see useMediaSession.js) — a toggle would
+  // desync if the lock screen's idea of the state ever lagged ours.
+  function setPlaying(next) {
     if (!state.track) return;
-    const next = !optimisticPlaying;
+    // Only the icon is optimistic now: the elements themselves are driven by
+    // useAudioDecks' isPlaying effect, which also has to settle a running
+    // crossfade — something this handler has no business doing itself.
     setOptimisticPlaying(next);
-    const audio = audioRef.current;
-    if (audio) {
-      if (next) tryPlay(audio);
-      else audio.pause();
-    }
     if (next) onResume();
     else onPause();
   }
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    return () => audio.removeEventListener('timeupdate', onTimeUpdate);
-  }, []);
-
-  // Snaps this client's playback position to match a seek issued by *any*
-  // client (including this one — the server is the source of truth). Runs on
-  // every state broadcast, but a small threshold ignores the normal drift
-  // from network latency / rounding so it only acts on a real seek.
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !state.track || audio.readyState === 0) return;
-    if (Math.abs(audio.currentTime - state.positionSeconds) > 1.5) {
-      audio.currentTime = state.positionSeconds;
-    }
-  }, [state.positionSeconds, state.track?.id]);
+  function handlePlayPause() {
+    setPlaying(!optimisticPlaying);
+  }
 
   // Real amplitude-over-time shape of the track, computed once (not a live
   // analysis) and cached — see useTrackWaveform.js.
@@ -198,8 +124,41 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
   const progress = Math.min(displayRatio * 100, 100);
   const displayTime = dragRatio !== null ? dragRatio * duration : currentTime;
 
+  // Relative seek, clamped to the track. Reads the live <audio> position
+  // rather than the `currentTime` state var so callers don't have to be
+  // re-created on every timeupdate tick.
+  function seekBy(delta) {
+    if (!state.track || !duration) return;
+    const from = getActiveAudio()?.currentTime ?? 0;
+    onSeek(Math.min(Math.max(from + delta, 0), duration));
+  }
+
+  // Lock screen / notification shade / media keys / macOS Now Playing. Every
+  // action maps to the same shared WS command as the on-screen control, so a
+  // phone in someone's pocket pauses the whole session, not just itself.
+  useMediaSession({
+    track: state.track,
+    isPlaying: state.isPlaying,
+    positionSeconds: state.positionSeconds,
+    hasNext: upcomingCount > 0,
+    onPlay: () => setPlaying(true),
+    onPause: () => setPlaying(false),
+    onStop,
+    onNext,
+    onSeekTo: onSeek,
+    onSeekBy: seekBy,
+    seekStep: SEEK_STEP_SECONDS,
+  });
+
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showNowPlaying, setShowNowPlaying] = useState(false);
+
+  // Live spectrum for the full-screen view only. Enabled by `showNowPlaying`
+  // rather than always-on because switching it on is what routes the <audio>
+  // element through a Web Audio graph for good (see useAudioAnalyser.js) —
+  // worth doing when someone actually opens the view, not on every page load.
+  const visualizerRef = useRef(null);
+  useAudioAnalyser(deckRefs, activeRef, visualizerRef, showNowPlaying && Boolean(state.track));
 
   // Sleep timer: purely client-side (no server involvement) — it just calls
   // the same shared onPause() any client can call at any time, after a local
@@ -253,7 +212,7 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
 
   // Player-wide shortcuts beyond spacebar (handled in App.jsx, since it has
   // to work with no player content on screen at all). Reads
-  // audioRef.current.currentTime directly rather than depending on the
+  // the active deck's currentTime directly rather than depending on the
   // `currentTime` state var, so this effect doesn't need to reattach on
   // every timeupdate tick.
   useEffect(() => {
@@ -273,9 +232,7 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
       if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
         if (!duration) return;
         e.preventDefault();
-        const delta = e.code === 'ArrowLeft' ? -5 : 5;
-        const from = audioRef.current?.currentTime ?? 0;
-        onSeek(Math.min(Math.max(from + delta, 0), duration));
+        seekBy(e.code === 'ArrowLeft' ? -SEEK_STEP_SECONDS : SEEK_STEP_SECONDS);
       } else if (e.key === 'n' || e.key === 'N') {
         if (upcomingCount === 0) return;
         onNext();
@@ -382,7 +339,11 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
 
   return (
     <footer className="player-bar">
-      <audio ref={audioRef} src="/api/stream" preload="none" />
+      {/* Both preload eagerly: the idle one gets the next track's URL ahead
+          of time so the switch is instant (see useAudioDecks.js). `src` is set
+          imperatively, never as an attribute. */}
+      <audio ref={deckRefs[0]} preload="auto" />
+      <audio ref={deckRefs[1]} preload="auto" />
 
       <div
         className={`player-track-info ${state.track ? 'clickable' : ''}`}
@@ -488,7 +449,10 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
             <button className="icon-button now-playing-close" onClick={() => setShowNowPlaying(false)} title="Fermer">
               ×
             </button>
-            <div className="now-playing-cover">
+            {/* Vinyl treatment: circular, turning while playing, frozen mid-
+                rotation on pause via animation-play-state so it reads as
+                "stopped" rather than jumping back to the top. */}
+            <div className={`now-playing-cover vinyl ${state.isPlaying ? '' : 'paused'}`}>
               {coverUrl ? (
                 <img src={coverUrl} alt="" />
               ) : (
@@ -496,10 +460,28 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
                   <IconMusicNote />
                 </div>
               )}
+              <span className="vinyl-hole" />
             </div>
             <div className="now-playing-text">
               <span className="now-playing-title">{state.track.title}</span>
               {state.track.artist && <span className="now-playing-artist">{state.track.artist}</span>}
+            </div>
+            {/* Reads from App's likedIds rather than state.track.liked: the
+                shared playback state carries the track row as it was when
+                playback started, so it wouldn't reflect a like made since. */}
+            <button
+              className={`icon-button now-playing-like ${liked ? 'liked' : ''}`}
+              onClick={() => onToggleLike(state.track.id, !liked)}
+              title={liked ? 'Retirer des titres likés' : 'Ajouter aux titres likés'}
+            >
+              <IconHeart filled={liked} />
+            </button>
+            {/* Static spans — the analyser writes their heights directly, so
+                React never re-renders this list (see useAudioAnalyser.js). */}
+            <div className="visualizer" ref={visualizerRef} aria-hidden="true">
+              {Array.from({ length: BAR_COUNT }).map((_, i) => (
+                <span key={i} />
+              ))}
             </div>
             {progressJSX}
             {controlsJSX}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import TrackRow from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
+import SelectionActions from './SelectionActions.jsx';
 import CoverMosaic from './CoverMosaic.jsx';
 import { useTrackSelection } from '../hooks/useTrackSelection.js';
 import { SORT_OPTIONS, sortTracks } from '../sort.js';
@@ -46,6 +47,7 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
   const [menu, setMenu] = useState(null);
   const [mode, setMode] = useState('list'); // 'list' | 'albums' | 'artists'
   const [activeGroup, setActiveGroup] = useState(null); // { type: 'album'|'artist', key, tracks } | null
+  const [groupMenu, setGroupMenu] = useState(null); // playlist picker for the group-wide "tout ajouter"
 
   useEffect(() => {
     fetch('/api/library')
@@ -81,7 +83,7 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
   // Selection operates on whatever's currently visible, so Shift+click range
   // selection matches what's on screen (a search filter, or a drilled-into
   // group).
-  const { selectedIds, handleRowClick, dragIdsFor } = useTrackSelection(displayedTracks);
+  const { selectedIds, handleRowClick, dragIdsFor, clearSelection } = useTrackSelection(displayedTracks);
 
   function playFrom(trackId) {
     const index = playbackOrder.findIndex((t) => t.id === trackId);
@@ -161,9 +163,30 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
               </span>
             </div>
           </div>
-          <button className="play-button-large" onClick={() => onPlay(playbackOrder.map((t) => t.id))}>
-            <IconPlay /> Lire
-          </button>
+          <div className="group-actions">
+            <button className="play-button-large" onClick={() => onPlay(playbackOrder.map((t) => t.id))}>
+              <IconPlay /> Lire
+            </button>
+            {/* Acts on the whole album/artist, independently of any row
+                selection — "tout" here means the group, not the selection. */}
+            <button
+              className="selection-action"
+              onClick={() => onEnqueue(playbackOrder.map((t) => t.id))}
+            >
+              Tout ajouter à la file
+            </button>
+            <button
+              className="selection-action"
+              disabled={playlists.length === 0}
+              title={playlists.length === 0 ? 'Aucune playlist' : undefined}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setGroupMenu({ x: rect.left, y: rect.bottom + 4 });
+              }}
+            >
+              Tout ajouter à une playlist
+            </button>
+          </div>
           {renderTrackList(playbackOrder)}
         </>
       ) : (
@@ -234,6 +257,24 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
             </div>
           )}
         </>
+      )}
+      <SelectionActions
+        ids={Array.from(selectedIds)}
+        playlists={playlists}
+        onEnqueue={onEnqueue}
+        onAddToPlaylist={onAddToPlaylist}
+        onClear={clearSelection}
+      />
+      {groupMenu && (
+        <ContextMenu
+          x={groupMenu.x}
+          y={groupMenu.y}
+          items={playlists.map((p) => ({
+            label: p.name,
+            onClick: () => onAddToPlaylist(p.id, playbackOrder.map((t) => t.id)),
+          }))}
+          onClose={() => setGroupMenu(null)}
+        />
       )}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItemsFor(menu.trackIds)} onClose={() => setMenu(null)} />}
     </div>

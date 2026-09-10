@@ -40,5 +40,12 @@ export function useTrackSelection(tracks) {
     return selectedIds.has(trackId) && selectedIds.size > 1 ? Array.from(selectedIds) : [trackId];
   }
 
-  return { selectedIds, handleRowClick, dragIdsFor };
+  // Used by the selection action bar's "Désélectionner", and after a bulk
+  // action so the bar doesn't linger over a selection the user is done with.
+  function clearSelection() {
+    setSelectedIds(new Set());
+    setAnchorIndex(null);
+  }
+
+  return { selectedIds, handleRowClick, dragIdsFor, clearSelection };
 }
