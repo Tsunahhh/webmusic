@@ -20,7 +20,8 @@ db.exec(`
     duration REAL,
     cover BLOB,
     cover_mime TEXT,
-    added_at INTEGER NOT NULL
+    added_at INTEGER NOT NULL,
+    liked INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS playlists (
@@ -43,3 +44,7 @@ db.exec(`
 const playlistColumns = new Set(db.prepare('PRAGMA table_info(playlists)').all().map((c) => c.name));
 if (!playlistColumns.has('cover')) db.exec('ALTER TABLE playlists ADD COLUMN cover BLOB');
 if (!playlistColumns.has('cover_mime')) db.exec('ALTER TABLE playlists ADD COLUMN cover_mime TEXT');
+
+// Same story for `tracks.liked` — predates the favorites feature.
+const trackColumns = new Set(db.prepare('PRAGMA table_info(tracks)').all().map((c) => c.name));
+if (!trackColumns.has('liked')) db.exec('ALTER TABLE tracks ADD COLUMN liked INTEGER NOT NULL DEFAULT 0');

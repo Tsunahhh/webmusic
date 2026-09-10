@@ -18,12 +18,18 @@ const insertTrack = db.prepare(`
 // Cover art is stored as a BLOB, so listing/lookup queries deliberately leave
 // it out and expose a cheap `hasCover` flag instead — the actual bytes are
 // only fetched by GET /api/tracks/:id/cover (see getTrackCover below).
-const TRACK_COLUMNS = 'id, filename, title, artist, album, duration, added_at, (cover IS NOT NULL) AS hasCover';
+const TRACK_COLUMNS = 'id, filename, title, artist, album, duration, added_at, liked, (cover IS NOT NULL) AS hasCover';
 
 export const listTracks = db.prepare(`SELECT ${TRACK_COLUMNS} FROM tracks ORDER BY added_at DESC`);
+export const listLikedTracks = db.prepare(`SELECT ${TRACK_COLUMNS} FROM tracks WHERE liked = 1 ORDER BY added_at DESC`);
 export const getTrack = db.prepare(`SELECT ${TRACK_COLUMNS} FROM tracks WHERE id = ?`);
 export const getTrackByFilename = db.prepare(`SELECT ${TRACK_COLUMNS} FROM tracks WHERE filename = ?`);
 export const getTrackCover = db.prepare('SELECT cover, cover_mime FROM tracks WHERE id = ?');
+const setTrackLikedStmt = db.prepare('UPDATE tracks SET liked = ? WHERE id = ?');
+
+export function setTrackLiked(id, liked) {
+  setTrackLikedStmt.run(liked ? 1 : 0, id);
+}
 
 export async function indexFile(filename) {
   const filePath = path.join(musicDir, filename);

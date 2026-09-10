@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import TrackRow from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { useTrackSelection } from '../hooks/useTrackSelection.js';
+import { SORT_OPTIONS, sortTracks } from '../sort.js';
 
-export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, playlists, onAddToPlaylist }) {
+export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, playlists, onAddToPlaylist, onToggleLike }) {
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [sortBy, setSortBy] = useState('custom');
   const [menu, setMenu] = useState(null);
 
   useEffect(() => {
@@ -18,10 +20,14 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
       });
   }, []);
 
+  // Sort reorders the whole library (what gets played), search only filters
+  // what's *shown* — see playFrom below, which rotates over sortedTracks,
+  // not filtered.
+  const sortedTracks = sortTracks(tracks, sortBy);
   const q = query.trim().toLowerCase();
   const filtered = q
-    ? tracks.filter((t) => t.title.toLowerCase().includes(q) || t.artist?.toLowerCase().includes(q))
-    : tracks;
+    ? sortedTracks.filter((t) => t.title.toLowerCase().includes(q) || t.artist?.toLowerCase().includes(q))
+    : sortedTracks;
 
   // Selection operates on whatever's currently visible, so Shift+click range
   // selection matches what's on screen when a search filter is active.
@@ -31,9 +37,17 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
   // the filtered view), rotated to start there, so playback continues
   // through everything else afterward.
   function playFrom(trackId) {
-    const index = tracks.findIndex((t) => t.id === trackId);
+    const index = sortedTracks.findIndex((t) => t.id === trackId);
     if (index === -1) return;
-    onPlay([...tracks.slice(index), ...tracks.slice(0, index)].map((t) => t.id));
+    onPlay([...sortedTracks.slice(index), ...sortedTracks.slice(0, index)].map((t) => t.id));
+  }
+
+  // Wraps the App-level toggleLike (API call + sidebar count) with a local
+  // optimistic update of this component's own track copy, so the row's
+  // heart icon (driven by track.liked) flips immediately.
+  function handleToggleLike(trackId, liked) {
+    setTracks((prev) => prev.map((t) => (t.id === trackId ? { ...t, liked: liked ? 1 : 0 } : t)));
+    onToggleLike(trackId, liked);
   }
 
   // Shared by the right-click menu and each row's "more" button (the latter
@@ -63,13 +77,25 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
         <p className="empty-hint">Aucune piste — ajoutez des fichiers dans server/music</p>
       ) : (
         <>
-          <input
-            className="search-input"
-            type="search"
-            placeholder="Rechercher un titre ou un artiste"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+          <div className="library-toolbar">
+            <input
+              className="search-input"
+              type="search"
+              placeholder="Rechercher un titre ou un artiste"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <label className="sort-row">
+              Trier par
+              <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           {filtered.length === 0 ? (
             <p className="empty-hint">Aucun résultat pour "{query}"</p>
           ) : (
@@ -85,6 +111,7 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
                   dragIds={dragIdsFor(track.id)}
                   onSelect={(e) => handleRowClick(track, i, e, playFrom)}
                   onOpenMenu={(e, ids) => setMenu({ x: e.clientX, y: e.clientY, trackIds: ids })}
+                  onToggleLike={handleToggleLike}
                 />
               ))}
             </ul>

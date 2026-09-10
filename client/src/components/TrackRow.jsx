@@ -1,6 +1,6 @@
 import { formatTime } from '../format.js';
 import NowPlayingBars from './NowPlayingBars.jsx';
-import { IconMore } from './icons.jsx';
+import { IconMore, IconHeart } from './icons.jsx';
 
 export const TRACK_DND_TYPE = 'application/x-musicweb-track-ids';
 // Distinct from TRACK_DND_TYPE (drag-to-add-to-playlist, read by
@@ -48,6 +48,7 @@ export default function TrackRow({
   dragIds,
   onSelect,
   onOpenMenu,
+  onToggleLike,
   children,
   reorderable,
   onReorderDragEnter,
@@ -93,6 +94,18 @@ export default function TrackRow({
         {track.artist && <span className="track-artist">{track.artist}</span>}
       </div>
       <span className="track-duration">{formatTime(track.duration)}</span>
+      {onToggleLike && (
+        <button
+          className={`icon-button like-btn ${track.liked ? 'liked' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleLike(track.id, !track.liked);
+          }}
+          title={track.liked ? 'Retirer des titres likés' : 'Ajouter aux titres likés'}
+        >
+          <IconHeart filled={Boolean(track.liked)} />
+        </button>
+      )}
       {children}
       <button
         className="icon-button more-btn"

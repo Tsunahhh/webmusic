@@ -11,10 +11,12 @@ export function useSocket() {
     isPlaying: false,
     positionSeconds: 0,
     shuffle: false,
+    repeat: 'all',
     upNext: [],
     queue: [],
   });
   const [connected, setConnected] = useState(false);
+  const [listenerCount, setListenerCount] = useState(1);
   const socketRef = useRef(null);
   const selfIdRef = useRef(null);
   // Mirrors `state` for the remote-change comparison in onmessage below —
@@ -40,6 +42,7 @@ export function useSocket() {
         if (msg.type !== 'state') return;
 
         if (msg.selfId) selfIdRef.current = msg.selfId;
+        if (typeof msg.listenerCount === 'number') setListenerCount(msg.listenerCount);
 
         // originClientId is null for this client's own initial sync and for
         // server-driven changes (queue auto-advance) — only flag a change as
@@ -75,5 +78,5 @@ export function useSocket() {
     }
   }
 
-  return { state, connected, send };
+  return { state, connected, send, listenerCount };
 }

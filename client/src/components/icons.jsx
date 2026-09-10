@@ -148,6 +148,57 @@ export function IconHelp(props) {
   );
 }
 
+export function IconRepeat(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 7h13a3 3 0 013 3v1" />
+      <path d="M17 4l3 3-3 3" />
+      <path d="M20 17H7a3 3 0 01-3-3v-1" />
+      <path d="M7 20l-3-3 3-3" />
+    </svg>
+  );
+}
+
+// Filled (not outline) so it reads clearly at the small size it's used at
+// (a like toggle on a track row) — an outline heart is hard to tell "liked"
+// from "not liked" at a glance next to the also-outlined more-actions icon.
+export function IconHeart({ filled, ...props }) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 20.5s-7.5-4.6-10-9.3C0.3 7.8 2 4.5 5.5 4.5c2 0 3.4 1 6.5 4 3.1-3 4.5-4 6.5-4 3.5 0 5.2 3.3 3.5 6.7-2.5 4.7-10 9.3-10 9.3z" />
+    </svg>
+  );
+}
+
+export function IconEdit(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 20l1-4.5L15.5 5 19 8.5 8.5 19 4 20z" />
+      <path d="M13 7l4 4" />
+    </svg>
+  );
+}
+
+export function IconTimer(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l3 2" />
+      <path d="M9 2h6" />
+    </svg>
+  );
+}
+
+export function IconHeadphones(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 14v-2a8 8 0 0116 0v2" />
+      <rect x="2.5" y="14" width="5" height="7" rx="2" />
+      <rect x="16.5" y="14" width="5" height="7" rx="2" />
+    </svg>
+  );
+}
+
 export function IconMusicNote(props) {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" {...props}>

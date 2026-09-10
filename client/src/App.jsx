@@ -7,6 +7,7 @@ import { showToast } from './toast.js';
 import Sidebar from './components/Sidebar.jsx';
 import Library from './components/Library.jsx';
 import PlaylistView from './components/PlaylistView.jsx';
+import LikedView from './components/LikedView.jsx';
 import QueueView from './components/QueueView.jsx';
 import PlayerBar from './components/PlayerBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
@@ -15,10 +16,37 @@ import ReconnectBanner from './components/ReconnectBanner.jsx';
 import { IconMenu } from './components/icons.jsx';
 
 export default function App() {
-  const { state, connected, send } = useSocket();
+  const { state, connected, send, listenerCount } = useSocket();
   const [theme, toggleTheme] = useTheme();
   const [playlists, setPlaylists] = useState([]);
   const [view, setView] = useState({ type: 'library' });
+  // Just the ids, for a cheap sidebar count and for TrackRow's heart icon —
+  // the actual liked-tracks *data* is fetched by LikedView itself, same
+  // split as `playlists` (summary here) vs a playlist's own tracks
+  // (fetched by PlaylistView).
+  const [likedIds, setLikedIds] = useState(new Set());
+
+  const refreshLiked = useCallback(() => {
+    fetch('/api/library/liked')
+      .then((res) => res.json())
+      .then((data) => setLikedIds(new Set(data.map((t) => t.id))));
+  }, []);
+
+  useEffect(refreshLiked, [refreshLiked]);
+
+  // Optimistic: flips the heart (and the sidebar count) immediately, since
+  // waiting on the round trip for a same-device toggle would feel laggy for
+  // no reason — there's no shared state here to race against (unlike
+  // playback), each device's like/unlike is independent.
+  function toggleLike(trackId, liked) {
+    setLikedIds((prev) => {
+      const next = new Set(prev);
+      if (liked) next.add(trackId);
+      else next.delete(trackId);
+      return next;
+    });
+    fetch(`/api/tracks/${trackId}/like`, { method: liked ? 'POST' : 'DELETE' });
+  }
 
   // Tints the main content's background gradient with the current track's
   // cover color — falls back to the static gradient (see index.css) while
@@ -107,6 +135,15 @@ export default function App() {
     });
   }
 
+  async function renamePlaylist(id, name) {
+    await fetch(`/api/playlists/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    refreshPlaylists();
+  }
+
   async function addTracksToPlaylist(playlistId, trackIds) {
     await Promise.all(
       trackIds.map((trackId) =>
@@ -171,14 +208,17 @@ export default function App() {
         playlists={playlists}
         view={view}
         upcomingCount={upcomingCount}
+        likedCount={likedIds.size}
         theme={theme}
         onToggleTheme={toggleTheme}
         onOpenSearch={() => setSearchOpen(true)}
         onSelectLibrary={() => selectView({ type: 'library' })}
         onSelectQueue={() => selectView({ type: 'queue' })}
+        onSelectLiked={() => selectView({ type: 'liked' })}
         onSelectPlaylist={(id) => selectView({ type: 'playlist', id })}
         onCreatePlaylist={createPlaylist}
         onDeletePlaylist={deletePlaylist}
+        onRenamePlaylist={renamePlaylist}
         onDropTrack={addTracksToPlaylist}
       />
 
@@ -191,6 +231,7 @@ export default function App() {
             onEnqueue={enqueueNext}
             playlists={playlists}
             onAddToPlaylist={addTracksToPlaylist}
+            onToggleLike={toggleLike}
           />
         )}
         {view.type === 'playlist' && (
@@ -204,6 +245,18 @@ export default function App() {
             onChanged={refreshPlaylists}
             playlists={playlists}
             onAddToPlaylist={addTracksToPlaylist}
+            onToggleLike={toggleLike}
+          />
+        )}
+        {view.type === 'liked' && (
+          <LikedView
+            currentTrackId={state.track?.id}
+            isPlaying={state.isPlaying}
+            onPlay={playQueue}
+            onEnqueue={enqueueNext}
+            playlists={playlists}
+            onAddToPlaylist={addTracksToPlaylist}
+            onToggleLike={toggleLike}
           />
         )}
         {view.type === 'queue' && (
@@ -218,12 +271,14 @@ export default function App() {
       <PlayerBar
         state={state}
         connected={connected}
+        listenerCount={listenerCount}
         onPause={() => send('pause')}
         onResume={() => send('resume')}
         onStop={() => send('stop')}
         onNext={() => send('next')}
         onSeek={(positionSeconds) => send('seek', { positionSeconds })}
         onShuffle={(enabled) => send('shuffle', { enabled })}
+        onRepeat={(mode) => send('repeat', { mode })}
       />
 
       <GlobalSearch

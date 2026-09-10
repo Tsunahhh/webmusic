@@ -12,6 +12,7 @@ import {
   removeFromUpNext,
   reorderUpNext,
   setShuffle,
+  setRepeat,
   onChange,
 } from './playbackState.js';
 
@@ -33,8 +34,24 @@ let wss = null;
 // any client can control playback for everyone.
 let currentOriginId = null;
 
+// wss.clients includes sockets mid-handshake/closing, not just fully OPEN
+// ones — counting only OPEN ones is what "how many devices are actually
+// listening right now" (the sidebar/player indicator) should mean.
+function listenerCount() {
+  let count = 0;
+  for (const client of wss.clients) {
+    if (client.readyState === client.OPEN) count += 1;
+  }
+  return count;
+}
+
 function broadcastState() {
-  const payload = JSON.stringify({ type: 'state', state: getState(), originClientId: currentOriginId });
+  const payload = JSON.stringify({
+    type: 'state',
+    state: getState(),
+    originClientId: currentOriginId,
+    listenerCount: listenerCount(),
+  });
   for (const client of wss.clients) {
     if (client.readyState === client.OPEN) client.send(payload);
   }
@@ -53,7 +70,13 @@ export function attachWsServer(httpServer) {
     // originClientId: null here — this is this client's own initial sync,
     // not a change caused by anyone; selfId tells it which id is "me" for
     // future broadcasts.
-    socket.send(JSON.stringify({ type: 'state', state: getState(), originClientId: null, selfId: socket.id }));
+    socket.send(
+      JSON.stringify({ type: 'state', state: getState(), originClientId: null, selfId: socket.id, listenerCount: listenerCount() })
+    );
+    // Nothing in playbackState.js changed, so onChange won't fire on its
+    // own — a join/leave still needs to reach everyone else's listener count.
+    broadcastState();
+    socket.on('close', () => broadcastState());
 
     socket.on('message', (raw) => {
       let msg;
@@ -95,6 +118,9 @@ export function attachWsServer(httpServer) {
             break;
           case 'shuffle':
             setShuffle(Boolean(msg.enabled));
+            break;
+          case 'repeat':
+            setRepeat(msg.mode);
             break;
           default:
             return;

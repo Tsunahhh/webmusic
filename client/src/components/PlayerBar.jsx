@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatTime } from '../format.js';
 import { isTypingTarget } from '../keyboard.js';
+import { showToast } from '../toast.js';
 import { useTrackWaveform } from '../hooks/useTrackWaveform.js';
 import {
   IconPlay,
@@ -8,10 +9,13 @@ import {
   IconStop,
   IconNext,
   IconShuffle,
+  IconRepeat,
   IconVolume,
   IconVolumeMute,
   IconMusicNote,
   IconHelp,
+  IconTimer,
+  IconHeadphones,
 } from './icons.jsx';
 
 const SHORTCUTS = [
@@ -21,6 +25,18 @@ const SHORTCUTS = [
   { keys: 'M', label: 'Couper / rétablir le son' },
   { keys: '?', label: 'Afficher / masquer cette aide' },
 ];
+
+// off → all → one → off. 'all' is the original always-on loop through the
+// current context; 'off' plays through it once and stops; 'one' repeats
+// just the current track — see playbackState.js for the server-side rules.
+const NEXT_REPEAT_MODE = { off: 'all', all: 'one', one: 'off' };
+const REPEAT_TITLE = {
+  off: 'Activer la répétition',
+  all: 'Répéter le contexte (cliquer pour répéter une seule piste)',
+  one: 'Répéter une seule piste (cliquer pour désactiver)',
+};
+
+const SLEEP_TIMER_OPTIONS = [15, 30, 45, 60];
 
 // The <audio> element always points at the single /api/stream broadcast.
 // The server closes every open connection on each track change (mp3/wav/opus
@@ -33,7 +49,7 @@ const SHORTCUTS = [
 // the server always serves the file from byte 0 so the browser gets a valid
 // header, and once metadata has loaded we set audio.currentTime to the live
 // position — the browser turns that into an HTTP Range request on its own.
-export default function PlayerBar({ state, onPause, onResume, onStop, onNext, onSeek, onShuffle, connected }) {
+export default function PlayerBar({ state, onPause, onResume, onStop, onNext, onSeek, onShuffle, onRepeat, connected, listenerCount }) {
   const audioRef = useRef(null);
   const progressRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -141,6 +157,56 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
 
   const [showShortcuts, setShowShortcuts] = useState(false);
 
+  // Sleep timer: purely client-side (no server involvement) — it just calls
+  // the same shared onPause() any client can call at any time, after a local
+  // countdown. Since playback has no per-client state (see CLAUDE.md), one
+  // device's timer firing pauses the whole shared session, same as if
+  // someone had pressed pause — which is exactly the "falling asleep to
+  // shared music" use case this is for.
+  const [sleepDeadline, setSleepDeadline] = useState(null); // timestamp, or null when off
+  const [showSleepMenu, setShowSleepMenu] = useState(false);
+  const sleepTimerRef = useRef(null);
+  // Forces a re-render every 15s so the displayed remaining time in the
+  // sleep menu ticks down instead of freezing at whatever it read on open.
+  const [, forceTick] = useState(0);
+
+  useEffect(() => {
+    if (!sleepDeadline) return;
+    const interval = setInterval(() => forceTick((n) => n + 1), 15000);
+    return () => clearInterval(interval);
+  }, [sleepDeadline]);
+
+  useEffect(() => () => clearTimeout(sleepTimerRef.current), []);
+
+  function startSleepTimer(minutes) {
+    clearTimeout(sleepTimerRef.current);
+    setSleepDeadline(Date.now() + minutes * 60000);
+    sleepTimerRef.current = setTimeout(() => {
+      onPause();
+      setSleepDeadline(null);
+      showToast('Minuteur de sommeil : lecture mise en pause');
+    }, minutes * 60000);
+    setShowSleepMenu(false);
+  }
+
+  function cancelSleepTimer() {
+    clearTimeout(sleepTimerRef.current);
+    setSleepDeadline(null);
+    setShowSleepMenu(false);
+  }
+
+  const sleepMinutesLeft = sleepDeadline ? Math.max(1, Math.ceil((sleepDeadline - Date.now()) / 60000)) : null;
+
+  const sleepMenuRef = useRef(null);
+  useEffect(() => {
+    if (!showSleepMenu) return;
+    function handlePointerDown(e) {
+      if (!sleepMenuRef.current?.contains(e.target)) setShowSleepMenu(false);
+    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [showSleepMenu]);
+
   // Player-wide shortcuts beyond spacebar (handled in App.jsx, since it has
   // to work with no player content on screen at all). Reads
   // audioRef.current.currentTime directly rather than depending on the
@@ -233,6 +299,14 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
             <IconShuffle />
           </button>
           <button
+            className={`control-button repeat-button ${state.repeat !== 'off' ? 'toggled' : ''}`}
+            onClick={() => onRepeat(NEXT_REPEAT_MODE[state.repeat])}
+            title={REPEAT_TITLE[state.repeat]}
+          >
+            <IconRepeat />
+            {state.repeat === 'one' && <span className="repeat-one-badge">1</span>}
+          </button>
+          <button
             className="control-button play-pause"
             onClick={handlePlayPause}
             disabled={!state.track}
@@ -288,6 +362,33 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
             title="Volume"
           />
         </div>
+        <div className="sleep-timer" ref={sleepMenuRef}>
+          <button
+            className={`icon-button ${sleepDeadline ? 'toggled' : ''}`}
+            onClick={() => setShowSleepMenu((v) => !v)}
+            title={sleepDeadline ? `Minuteur de sommeil : ${sleepMinutesLeft} min restantes` : 'Minuteur de sommeil'}
+          >
+            <IconTimer />
+          </button>
+          {showSleepMenu && (
+            <div className="sleep-menu">
+              <span className="sleep-menu-header">Mettre en pause dans…</span>
+              {SLEEP_TIMER_OPTIONS.map((minutes) => (
+                <button key={minutes} onClick={() => startSleepTimer(minutes)}>
+                  {minutes} min
+                </button>
+              ))}
+              {sleepDeadline && (
+                <button className="active" onClick={cancelSleepTimer}>
+                  Désactiver ({sleepMinutesLeft} min restantes)
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        <span className="listener-count" title="Appareils connectés">
+          <IconHeadphones /> {listenerCount}
+        </span>
         <button className="icon-button" onClick={() => setShowShortcuts((v) => !v)} title="Raccourcis clavier (?)">
           <IconHelp />
         </button>

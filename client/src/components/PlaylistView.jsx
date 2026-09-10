@@ -3,6 +3,7 @@ import TrackRow, { PLAYLIST_REORDER_DND_TYPE } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { useTrackSelection } from '../hooks/useTrackSelection.js';
 import { showToast } from '../toast.js';
+import { SORT_OPTIONS, sortTracks } from '../sort.js';
 import { IconPlay, IconTrash, IconImage } from './icons.jsx';
 
 const COVER_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
@@ -16,14 +17,20 @@ export default function PlaylistView({
   onChanged,
   playlists,
   onAddToPlaylist,
+  onToggleLike,
 }) {
   const [playlist, setPlaylist] = useState(null);
   const [menu, setMenu] = useState(null);
   const [coverVersion, setCoverVersion] = useState(0);
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [sortBy, setSortBy] = useState('custom');
   const coverInputRef = useRef(null);
   const tracks = playlist?.tracks ?? [];
-  const { selectedIds, handleRowClick, dragIdsFor } = useTrackSelection(tracks);
+  // 'custom' is the playlist's own stored (drag-reorderable) order — any
+  // other sort is a read-only view derived from it, so dragging to reorder
+  // is only meaningful (and only enabled, see below) while sortBy is 'custom'.
+  const sortedTracks = sortTracks(tracks, sortBy);
+  const { selectedIds, handleRowClick, dragIdsFor } = useTrackSelection(sortedTracks);
 
   function load() {
     fetch(`/api/playlists/${playlistId}`)
@@ -75,12 +82,24 @@ export default function PlaylistView({
     load();
   }
 
-  // Playing a track from within this playlist queues the *whole* playlist,
-  // rotated to start there, so playback loops continuously through it.
+  // Playing a track from within this playlist queues the *whole* playlist
+  // (in whatever order it's currently sorted/shown), rotated to start there,
+  // so playback loops continuously through it.
   function playFrom(trackId) {
-    const index = tracks.findIndex((t) => t.id === trackId);
+    const index = sortedTracks.findIndex((t) => t.id === trackId);
     if (index === -1) return;
-    onPlay([...tracks.slice(index), ...tracks.slice(0, index)].map((t) => t.id));
+    onPlay([...sortedTracks.slice(index), ...sortedTracks.slice(0, index)].map((t) => t.id));
+  }
+
+  // Wraps the App-level toggleLike (API call + sidebar count) with a local
+  // optimistic update of this playlist's own track copy, so the row's heart
+  // icon (driven by track.liked) flips immediately.
+  function handleToggleLike(trackId, liked) {
+    setPlaylist((p) => ({
+      ...p,
+      tracks: p.tracks.map((t) => (t.id === trackId ? { ...t, liked: liked ? 1 : 0 } : t)),
+    }));
+    onToggleLike(trackId, liked);
   }
 
   // Shared by the right-click menu and each row's "more" button (the latter
@@ -190,7 +209,7 @@ export default function PlaylistView({
 
       <button
         className="play-button-large"
-        onClick={() => onPlay(tracks.map((t) => t.id))}
+        onClick={() => onPlay(sortedTracks.map((t) => t.id))}
         disabled={tracks.length === 0}
       >
         <IconPlay /> Lire
@@ -199,36 +218,51 @@ export default function PlaylistView({
       {tracks.length === 0 ? (
         <p className="empty-hint">Playlist vide — ajoutez des pistes depuis la bibliothèque</p>
       ) : (
-        <ul className="track-list">
-          {tracks.map((track, i) => (
-            <TrackRow
-              key={track.id}
-              track={track}
-              index={i}
-              active={track.id === currentTrackId}
-              isPlaying={isPlaying}
-              selected={selectedIds.has(track.id)}
-              dragIds={dragIdsFor(track.id)}
-              onSelect={(e) => handleRowClick(track, i, e, playFrom)}
-              onOpenMenu={(e, ids) => setMenu({ x: e.clientX, y: e.clientY, trackIds: ids })}
-              reorderable
-              dragOverReorder={dragOverIndex === i}
-              onReorderDragEnter={setDragOverIndex}
-              onReorderDrop={handleReorderDrop}
-            >
-              <button
-                className="icon-button remove-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeTrack(track.id);
-                }}
-                title="Retirer de la playlist"
+        <>
+          <div className="sort-row">
+            <label>
+              Trier par
+              <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.value === 'custom' ? 'Ordre de la playlist' : o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <ul className="track-list">
+            {sortedTracks.map((track, i) => (
+              <TrackRow
+                key={track.id}
+                track={track}
+                index={i}
+                active={track.id === currentTrackId}
+                isPlaying={isPlaying}
+                selected={selectedIds.has(track.id)}
+                dragIds={dragIdsFor(track.id)}
+                onSelect={(e) => handleRowClick(track, i, e, playFrom)}
+                onOpenMenu={(e, ids) => setMenu({ x: e.clientX, y: e.clientY, trackIds: ids })}
+                onToggleLike={handleToggleLike}
+                reorderable={sortBy === 'custom'}
+                dragOverReorder={dragOverIndex === i}
+                onReorderDragEnter={setDragOverIndex}
+                onReorderDrop={handleReorderDrop}
               >
-                <IconTrash />
-              </button>
-            </TrackRow>
-          ))}
-        </ul>
+                <button
+                  className="icon-button remove-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeTrack(track.id);
+                  }}
+                  title="Retirer de la playlist"
+                >
+                  <IconTrash />
+                </button>
+              </TrackRow>
+            ))}
+          </ul>
+        </>
       )}
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menuItemsFor(menu.trackIds)} onClose={() => setMenu(null)} />

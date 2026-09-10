@@ -7,6 +7,7 @@ import {
   getPlaylistTracks,
   createPlaylist,
   deletePlaylist,
+  renamePlaylist,
   addTrackToPlaylist,
   removeTrackFromPlaylist,
   reorderPlaylistTracks,
@@ -47,6 +48,13 @@ playlistsRouter.get('/playlists/:id', (req, res) => {
   const playlist = getPlaylist.get(req.params.id);
   if (!playlist) return res.status(404).json({ error: 'Playlist introuvable' });
   res.json({ ...playlist, tracks: getPlaylistTracks.all(req.params.id) });
+});
+
+playlistsRouter.patch('/playlists/:id', (req, res) => {
+  const name = req.body?.name?.trim();
+  if (!name) return res.status(400).json({ error: 'Un nom de playlist est requis' });
+  renamePlaylist(req.params.id, name);
+  res.json(getPlaylist.get(req.params.id));
 });
 
 playlistsRouter.delete('/playlists/:id', (req, res) => {

@@ -15,6 +15,10 @@ const state = {
   baseOrder: [], // the full canonical (unshuffled) track id list for the current context, fixed at
                  // playQueue() time and never mutated afterward — shuffle on/off is derived from this.
   shuffle: false, // a standing preference — survives track/context changes, not reset by stop()
+  repeat: 'all', // 'off' | 'all' | 'one' — also a standing preference, like shuffle. 'all' is the
+                 // original always-on defaultQueue loop; 'off' stops pushing a finished 'queue' track
+                 // back once the context has played through; 'one' repeats the current track forever
+                 // on natural end, bypassing upNext/defaultQueue entirely until changed.
 };
 
 // Listeners are notified after every state mutation, including ones nothing
@@ -52,12 +56,18 @@ function clearAdvanceTimer() {
 
 // Schedules the switch to the next queued track for when the current one
 // ends. Re-derives the remaining time from elapsedBeforeStart so pause/resume
-// (which freeze/unfreeze this timer) don't lose track of position.
+// (which freeze/unfreeze this timer) don't lose track of position. Always
+// runs whenever a track is playing, even with nothing queued: a 'queue'-
+// sourced track with repeat 'all' needs to loop back to *itself* (the
+// single-track-context case), repeat 'one' always needs to restart itself,
+// and repeat 'off' still needs the natural end detected so advanceQueue can
+// call stop() — skipping this when nothing's upcoming used to just leave
+// position counting up past the track's own duration forever.
 function scheduleAdvance() {
   clearAdvanceTimer();
-  if (!hasUpcoming() || !state.track?.duration) return;
+  if (!state.track?.duration) return;
   const remaining = state.track.duration - state.elapsedBeforeStart;
-  advanceTimer = setTimeout(advanceQueue, Math.max(remaining, 0) * 1000);
+  advanceTimer = setTimeout(() => advanceQueue(true), Math.max(remaining, 0) * 1000);
 }
 
 function startTrack(track, source) {
@@ -74,9 +84,19 @@ function startTrack(track, source) {
 // Two rules: a track that came from the context queue loops back to the end
 // of it when it's done (continuous playback through a playlist/library);
 // manually queued ("play next") tracks never do — once played, they're gone.
-// Priority is upNext first, defaultQueue second, always.
-function advanceQueue() {
-  if (state.track && state.currentSource === 'queue') {
+// Priority is upNext first, defaultQueue second, always. `repeat` modifies
+// both rules: 'off' stops the loop-back (a context plays through once and
+// stops), 'one' short-circuits everything on a natural end (auto === true)
+// to just restart the same track, ignoring upNext/defaultQueue entirely —
+// same convention as Spotify's repeat-one, which a manual skip still escapes.
+function advanceQueue(auto = false) {
+  if (auto && state.repeat === 'one' && state.track) {
+    startTrack(state.track, state.currentSource);
+    notify();
+    return;
+  }
+
+  if (state.track && state.currentSource === 'queue' && state.repeat !== 'off') {
     state.defaultQueue.push(state.track.id);
   }
 
@@ -105,6 +125,7 @@ export function getState() {
     isPlaying: state.isPlaying,
     positionSeconds,
     shuffle: state.shuffle,
+    repeat: state.repeat,
     upNext: state.upNext.map((id) => getTrack.get(id)).filter(Boolean),
     queue: state.defaultQueue.map((id) => getTrack.get(id)).filter(Boolean),
   };
@@ -128,8 +149,8 @@ export function playQueue(trackIds) {
 }
 
 export function playNext() {
-  if (!hasUpcoming()) return;
-  advanceQueue();
+  if (!hasUpcoming() && state.repeat !== 'one') return;
+  advanceQueue(false);
 }
 
 // Adds tracks to the front of the manual queue, in the given order — each
@@ -176,6 +197,17 @@ export function setShuffle(enabled) {
     const remaining = new Set(state.defaultQueue);
     state.defaultQueue = state.baseOrder.filter((id) => remaining.has(id));
   }
+  notify();
+}
+
+export function setRepeat(mode) {
+  if (!['off', 'all', 'one'].includes(mode)) return;
+  state.repeat = mode;
+  // Switching into/out of 'one' changes whether scheduleAdvance() should run
+  // with nothing queued (see its own comment) — only meaningful while
+  // actually playing; pause() already cleared the timer, and resume()/seek()
+  // will reschedule it correctly on their own.
+  if (state.isPlaying) scheduleAdvance();
   notify();
 }
 

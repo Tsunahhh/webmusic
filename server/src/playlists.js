@@ -2,6 +2,7 @@ import { db } from './db.js';
 
 const insertPlaylist = db.prepare('INSERT INTO playlists (name, created_at) VALUES (?, ?)');
 const deletePlaylistStmt = db.prepare('DELETE FROM playlists WHERE id = ?');
+const renamePlaylistStmt = db.prepare('UPDATE playlists SET name = ? WHERE id = ?');
 const maxPositionStmt = db.prepare('SELECT COALESCE(MAX(position), -1) AS maxPos FROM playlist_tracks WHERE playlist_id = ?');
 const addTrackStmt = db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)');
 const removeTrackStmt = db.prepare('DELETE FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?');
@@ -26,7 +27,7 @@ export const getPlaylist = db.prepare(
 export const getPlaylistCover = db.prepare('SELECT cover, cover_mime FROM playlists WHERE id = ?');
 
 export const getPlaylistTracks = db.prepare(`
-  SELECT tracks.id, tracks.title, tracks.artist, tracks.album, tracks.duration,
+  SELECT tracks.id, tracks.title, tracks.artist, tracks.album, tracks.duration, tracks.liked,
     (tracks.cover IS NOT NULL) AS hasCover, playlist_tracks.position
   FROM playlist_tracks
   JOIN tracks ON tracks.id = playlist_tracks.track_id
@@ -41,6 +42,10 @@ export function createPlaylist(name) {
 
 export function deletePlaylist(id) {
   deletePlaylistStmt.run(id);
+}
+
+export function renamePlaylist(id, name) {
+  renamePlaylistStmt.run(name, id);
 }
 
 export function addTrackToPlaylist(playlistId, trackId) {

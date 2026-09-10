@@ -13,11 +13,11 @@ Design
 - Sidebar avec sections repliables (Bibliothèque / Playlists / File d'attente) si le nombre de playlists grandit — actuellement tout est à plat.
 - Couleur d'accent personnalisable (--accent est du vert Spotify #1db954) — un sélecteur de thème pour se démarquer visuellement du clone.
 
-Boutons utiles
-- Bouton répéter (repeat one / off) — actuellement il n'y a que le shuffle, la boucle infinie de defaultQueue n'a pas d'"off".
-- Bouton favoris/like par morceau (cœur sur TrackRow.jsx), avec une playlist virtuelle "Titres likés" auto-générée en sidebar.
-- "Ajouter à une playlist" directement dans ContextMenu.jsx — aujourd'hui il n'y a que "Ajouter à la file", et ajouter à une playlist n'est possible qu'en drag-and-drop (inutilisable sur mobile/tactile).
-- Bouton tri (titre / artiste / date d'ajout / durée) dans Library.jsx et PlaylistView.jsx — l'ordre est fixe aujourd'hui.
-- Bouton renommer une playlist — actuellement seulement créer/supprimer.
-- Bouton minuteur de sommeil (sleep timer) — pratique pour un système de diffusion partagé en soirée.
-- Indicateur/bouton "qui écoute" — afficher le nombre d'appareils connectés (déjà calculable côté serveur via le nombre de sockets WS ouverts).
+Boutons utiles (fait)
+- Bouton répéter (off / all / one) dans PlayerBar.jsx — off arrête la boucle de defaultQueue après un passage complet, one répète la piste en cours indéfiniment (playbackState.js `repeat`, WS `repeat`).
+- Favoris/like par morceau (cœur sur TrackRow.jsx, colonne `tracks.liked`), avec une playlist virtuelle "Titres likés" en sidebar (LikedView.jsx, GET /api/library/liked).
+- "Ajouter à une playlist" dans ContextMenu.jsx — en fait déjà présent depuis la v1 (Library.jsx/PlaylistView.jsx `menuItemsFor`), la description du reste de ce fichier était obsolète.
+- Bouton tri (ordre par défaut / titre / artiste / durée) dans Library.jsx et PlaylistView.jsx (client/src/sort.js) — pour une playlist, le tri custom reste l'ordre manuel drag-and-drop existant.
+- Renommer une playlist depuis la sidebar (icône crayon, PATCH /api/playlists/:id).
+- Minuteur de sommeil dans PlayerBar.jsx — purement client, déclenche le `pause` partagé après le délai choisi.
+- Indicateur du nombre d'appareils connectés dans PlayerBar.jsx (wsServer.js compte les sockets WS ouverts et le diffuse à chaque changement d'état).
