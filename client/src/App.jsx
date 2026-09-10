@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSocket } from './hooks/useSocket.js';
 import { useTheme } from './hooks/useTheme.js';
 import { useDominantColor } from './hooks/useDominantColor.js';
+import { isTypingTarget } from './keyboard.js';
 import { showToast } from './toast.js';
 import Sidebar from './components/Sidebar.jsx';
 import Library from './components/Library.jsx';
@@ -9,6 +10,8 @@ import PlaylistView from './components/PlaylistView.jsx';
 import QueueView from './components/QueueView.jsx';
 import PlayerBar from './components/PlayerBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
+import GlobalSearch from './components/GlobalSearch.jsx';
+import ReconnectBanner from './components/ReconnectBanner.jsx';
 import { IconMenu } from './components/icons.jsx';
 
 export default function App() {
@@ -32,6 +35,7 @@ export default function App() {
   // Off-canvas on narrow viewports only (see the .sidebar CSS media query) —
   // the sidebar stays permanently visible on desktop regardless of this flag.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // Picking a destination should also close the mobile drawer — otherwise
   // it'd keep covering the view that just changed underneath it.
@@ -59,10 +63,48 @@ export default function App() {
 
   async function deletePlaylist(id) {
     const playlist = playlists.find((p) => p.id === id);
+    // Captured *before* deleting, so "Annuler" can recreate the playlist
+    // with the same name, tracks (in order) and cover — the summary list in
+    // `playlists` only has a track count, not the actual track ids.
+    const detail = await fetch(`/api/playlists/${id}`)
+      .then((res) => res.json())
+      .catch(() => null);
+    const coverBlob = detail?.hasCover
+      ? await fetch(`/api/playlists/${id}/cover`)
+          .then((res) => (res.ok ? res.blob() : null))
+          .catch(() => null)
+      : null;
+
     await fetch(`/api/playlists/${id}`, { method: 'DELETE' });
     if (view.type === 'playlist' && view.id === id) setView({ type: 'library' });
     refreshPlaylists();
-    showToast(playlist ? `Playlist "${playlist.name}" supprimée` : 'Playlist supprimée');
+    showToast(playlist ? `Playlist "${playlist.name}" supprimée` : 'Playlist supprimée', {
+      action: {
+        label: 'Annuler',
+        onClick: async () => {
+          if (!detail) return;
+          const created = await fetch('/api/playlists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: detail.name }),
+          }).then((res) => res.json());
+          for (const t of detail.tracks) {
+            await fetch(`/api/playlists/${created.id}/tracks`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ trackId: t.id }),
+            });
+          }
+          if (coverBlob) {
+            const body = new FormData();
+            body.append('file', coverBlob, 'cover');
+            await fetch(`/api/playlists/${created.id}/cover`, { method: 'POST', body });
+          }
+          refreshPlaylists();
+          showToast(`Playlist "${detail.name}" restaurée`);
+        },
+      },
+    });
   }
 
   async function addTracksToPlaylist(playlistId, trackIds) {
@@ -96,12 +138,18 @@ export default function App() {
   const upcomingCount = state.upNext.length + state.queue.length;
 
   // Spacebar play/pause — the one keyboard shortcut every media player has.
-  // Ignored while typing in an input/textarea so it doesn't fight with text entry.
+  // Ignored while typing in an input/textarea so it doesn't fight with text
+  // entry. Ctrl/Cmd+K opens global search regardless of focus, like most
+  // apps' command palettes — search should stay reachable even *while*
+  // typing somewhere else (e.g. the library's own search box).
   useEffect(() => {
     function handleKeyDown(e) {
-      if (e.code !== 'Space' || !state.track) return;
-      const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+        return;
+      }
+      if (e.code !== 'Space' || !state.track || isTypingTarget()) return;
       e.preventDefault();
       send(state.isPlaying ? 'pause' : 'resume');
     }
@@ -111,6 +159,8 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <ReconnectBanner connected={connected} />
+
       <button className="mobile-menu-toggle" onClick={() => setSidebarOpen((v) => !v)} title="Menu">
         <IconMenu />
       </button>
@@ -123,6 +173,7 @@ export default function App() {
         upcomingCount={upcomingCount}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onOpenSearch={() => setSearchOpen(true)}
         onSelectLibrary={() => selectView({ type: 'library' })}
         onSelectQueue={() => selectView({ type: 'queue' })}
         onSelectPlaylist={(id) => selectView({ type: 'playlist', id })}
@@ -173,6 +224,14 @@ export default function App() {
         onNext={() => send('next')}
         onSeek={(positionSeconds) => send('seek', { positionSeconds })}
         onShuffle={(enabled) => send('shuffle', { enabled })}
+      />
+
+      <GlobalSearch
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        playlists={playlists}
+        onPlayTrack={playQueue}
+        onSelectPlaylist={(id) => selectView({ type: 'playlist', id })}
       />
 
       <ToastHost />

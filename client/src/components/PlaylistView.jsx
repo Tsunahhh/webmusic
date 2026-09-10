@@ -34,9 +34,24 @@ export default function PlaylistView({
   useEffect(load, [playlistId]);
 
   async function removeTrack(trackId) {
+    const track = tracks.find((t) => t.id === trackId);
     await fetch(`/api/playlists/${playlistId}/tracks/${trackId}`, { method: 'DELETE' });
     load();
     onChanged?.();
+    showToast(track ? `« ${track.title} » retiré de la playlist` : 'Piste retirée de la playlist', {
+      action: {
+        label: 'Annuler',
+        onClick: async () => {
+          await fetch(`/api/playlists/${playlistId}/tracks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trackId }),
+          });
+          load();
+          onChanged?.();
+        },
+      },
+    });
   }
 
   async function uploadCover(file) {

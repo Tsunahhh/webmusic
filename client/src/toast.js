@@ -3,8 +3,11 @@
 // subscriber, mounted once in App.jsx.
 let listeners = [];
 
-export function showToast(message) {
-  const toast = { id: Math.random().toString(36).slice(2), message };
+// options.action = { label, onClick } shows an inline button (e.g. "Annuler")
+// that runs onClick and dismisses the toast — used after a destructive
+// action so it can be undone within the toast's visible window.
+export function showToast(message, options = {}) {
+  const toast = { id: Math.random().toString(36).slice(2), message, action: options.action ?? null };
   for (const fn of listeners) fn(toast);
 }
 

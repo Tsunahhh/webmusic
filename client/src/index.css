@@ -233,6 +233,16 @@ select {
   flex-shrink: 0;
 }
 
+.shortcut-hint {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
 .playlist-nav-item .delete-btn {
   opacity: 0;
 }
@@ -965,13 +975,33 @@ select {
 }
 
 .toast {
-  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 18px;
   background: var(--bg-highlight);
   color: var(--text-primary);
   font-size: 0.85rem;
   border-radius: 6px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   animation: toast-in-out 2.5s ease forwards;
+  pointer-events: auto;
+}
+
+.toast-action {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  text-decoration: underline;
 }
 
 @keyframes toast-in-out {
@@ -987,6 +1017,207 @@ select {
   100% {
     opacity: 0;
     transform: translateY(-8px);
+  }
+}
+
+/* Shortcuts help panel */
+
+.shortcuts-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.shortcuts-panel {
+  position: relative;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  padding: 24px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.shortcuts-panel h2 {
+  margin: 0 0 16px;
+  font-size: 1.1rem;
+}
+
+.shortcuts-panel dl {
+  margin: 0;
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.shortcuts-row:last-child {
+  border-bottom: none;
+}
+
+.shortcuts-row dt {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  background: var(--bg-hover);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.shortcuts-row dd {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+.shortcuts-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+/* Global search (Ctrl/Cmd+K) */
+
+.global-search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.global-search-panel {
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.global-search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.global-search-input-row input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.global-search-input-row input:focus {
+  outline: none;
+}
+
+.global-search-panel .empty-hint {
+  padding: 16px;
+}
+
+.global-search-results {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.global-search-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.global-search-result.active {
+  background: var(--bg-hover);
+}
+
+.global-search-result-type {
+  flex-shrink: 0;
+  width: 56px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.global-search-result-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.global-search-result-sub {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+/* Reconnect banner — only shown after a sustained WS outage, see
+   ReconnectBanner.jsx */
+
+.reconnect-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-highlight);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.reconnect-banner .connection-dot {
+  animation: reconnect-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes reconnect-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
   }
 }
 

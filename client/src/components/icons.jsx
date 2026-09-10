@@ -129,6 +129,25 @@ export function IconMoon(props) {
   );
 }
 
+export function IconSearch(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
+  );
+}
+
+export function IconHelp(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.2a2.5 2.5 0 014.9.8c0 1.7-2.4 1.8-2.4 3.5" />
+      <circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function IconMusicNote(props) {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" {...props}>

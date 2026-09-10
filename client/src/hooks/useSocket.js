@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { showToast } from '../toast.js';
 
 // Owns the control-channel WebSocket: keeps `state` (current track,
 // isPlaying, positionSeconds) mirrored from the server and exposes `send`
@@ -15,6 +16,10 @@ export function useSocket() {
   });
   const [connected, setConnected] = useState(false);
   const socketRef = useRef(null);
+  const selfIdRef = useRef(null);
+  // Mirrors `state` for the remote-change comparison in onmessage below —
+  // a plain closure over `state` would see a stale value there.
+  const stateRef = useRef(state);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,7 +37,28 @@ export function useSocket() {
       };
       socket.onmessage = (event) => {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'state') setState(msg.state);
+        if (msg.type !== 'state') return;
+
+        if (msg.selfId) selfIdRef.current = msg.selfId;
+
+        // originClientId is null for this client's own initial sync and for
+        // server-driven changes (queue auto-advance) — only flag a change as
+        // "remote" when it's tagged with a *different* client's id. There's
+        // no host client here (see wsServer.js), so this is the only way to
+        // tell "I just did that" apart from "another device changed this."
+        const isRemote = msg.originClientId && msg.originClientId !== selfIdRef.current;
+        if (isRemote) {
+          const prev = stateRef.current;
+          const next = msg.state;
+          if (prev.track?.id !== next.track?.id) {
+            showToast(next.track ? `Un autre appareil a lancé « ${next.track.title} »` : 'Un autre appareil a arrêté la lecture');
+          } else if (prev.isPlaying !== next.isPlaying) {
+            showToast(next.isPlaying ? 'Un autre appareil a repris la lecture' : 'Un autre appareil a mis en pause');
+          }
+        }
+
+        stateRef.current = msg.state;
+        setState(msg.state);
       };
     }
 

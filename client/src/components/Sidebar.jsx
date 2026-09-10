@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { IconPlus, IconTrash, IconMusicNote, IconQueue, IconSun, IconMoon } from './icons.jsx';
+import { IconPlus, IconTrash, IconMusicNote, IconQueue, IconSun, IconMoon, IconSearch } from './icons.jsx';
 import { TRACK_DND_TYPE } from './TrackRow.jsx';
+
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? navigator.userAgent);
 
 export default function Sidebar({
   playlists,
@@ -8,6 +10,7 @@ export default function Sidebar({
   upcomingCount,
   theme,
   onToggleTheme,
+  onOpenSearch,
   onSelectLibrary,
   onSelectQueue,
   onSelectPlaylist,
@@ -43,6 +46,13 @@ export default function Sidebar({
           {theme === 'dark' ? <IconSun /> : <IconMoon />}
         </button>
       </div>
+
+      <button className="nav-item search-trigger" onClick={onOpenSearch}>
+        <span className="nav-item-label">
+          <IconSearch /> Rechercher
+        </span>
+        <span className="shortcut-hint">{IS_MAC ? '⌘K' : 'Ctrl K'}</span>
+      </button>
 
       <button className={`nav-item ${view.type === 'library' ? 'active' : ''}`} onClick={onSelectLibrary}>
         Bibliothèque

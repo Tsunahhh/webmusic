@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import {
   getState,
@@ -21,8 +22,19 @@ import {
 
 let wss = null;
 
+// Set for the duration of handling one incoming WS message (synchronously —
+// nothing in playbackState.js awaits), so that if it causes a state change,
+// the resulting broadcastState() call below can tag the broadcast with
+// whichever client caused it. Stays null for changes nothing here triggered
+// directly (the queue's auto-advance timer firing in playbackState.js) —
+// there's no "current" client to blame for those. This is what lets each
+// client's UI tell "I just did that" apart from "another device changed
+// this" (see useSocket.js) even though there's no concept of a host client —
+// any client can control playback for everyone.
+let currentOriginId = null;
+
 function broadcastState() {
-  const payload = JSON.stringify({ type: 'state', state: getState() });
+  const payload = JSON.stringify({ type: 'state', state: getState(), originClientId: currentOriginId });
   for (const client of wss.clients) {
     if (client.readyState === client.OPEN) client.send(payload);
   }
@@ -37,7 +49,11 @@ export function attachWsServer(httpServer) {
   onChange(broadcastState);
 
   wss.on('connection', (socket) => {
-    socket.send(JSON.stringify({ type: 'state', state: getState() }));
+    socket.id = randomUUID();
+    // originClientId: null here — this is this client's own initial sync,
+    // not a change caused by anyone; selfId tells it which id is "me" for
+    // future broadcasts.
+    socket.send(JSON.stringify({ type: 'state', state: getState(), originClientId: null, selfId: socket.id }));
 
     socket.on('message', (raw) => {
       let msg;
@@ -47,6 +63,7 @@ export function attachWsServer(httpServer) {
         return;
       }
 
+      currentOriginId = socket.id;
       try {
         switch (msg.type) {
           case 'playQueue':
@@ -84,6 +101,8 @@ export function attachWsServer(httpServer) {
         }
       } catch (err) {
         socket.send(JSON.stringify({ type: 'error', message: err.message }));
+      } finally {
+        currentOriginId = null;
       }
     });
   });

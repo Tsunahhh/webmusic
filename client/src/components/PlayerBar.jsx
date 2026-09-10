@@ -1,7 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatTime } from '../format.js';
+import { isTypingTarget } from '../keyboard.js';
 import { useTrackWaveform } from '../hooks/useTrackWaveform.js';
-import { IconPlay, IconPause, IconStop, IconNext, IconShuffle, IconVolume, IconVolumeMute, IconMusicNote } from './icons.jsx';
+import {
+  IconPlay,
+  IconPause,
+  IconStop,
+  IconNext,
+  IconShuffle,
+  IconVolume,
+  IconVolumeMute,
+  IconMusicNote,
+  IconHelp,
+} from './icons.jsx';
+
+const SHORTCUTS = [
+  { keys: 'Espace', label: 'Lecture / pause' },
+  { keys: '← / →', label: 'Reculer / avancer de 5 s' },
+  { keys: 'N', label: 'Piste suivante' },
+  { keys: 'M', label: 'Couper / rétablir le son' },
+  { keys: '?', label: 'Afficher / masquer cette aide' },
+];
 
 // The <audio> element always points at the single /api/stream broadcast.
 // The server closes every open connection on each track change (mp3/wav/opus
@@ -67,6 +86,29 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
     }
   }, [state.isPlaying]);
 
+  // Optimistic play/pause: the icon (and the audio element itself) flips
+  // the instant *this* client clicks, instead of waiting on the WS
+  // round-trip through the server and back — see handlePlayPause. Re-synced
+  // from the authoritative state.isPlaying whenever it changes, which also
+  // covers another device toggling playback (the effect above already
+  // handles the actual audio.play()/pause() for that case; this just keeps
+  // the icon in step with it).
+  const [optimisticPlaying, setOptimisticPlaying] = useState(state.isPlaying);
+  useEffect(() => setOptimisticPlaying(state.isPlaying), [state.isPlaying]);
+
+  function handlePlayPause() {
+    if (!state.track) return;
+    const next = !optimisticPlaying;
+    setOptimisticPlaying(next);
+    const audio = audioRef.current;
+    if (audio) {
+      if (next) audio.play().catch(() => {});
+      else audio.pause();
+    }
+    if (next) onResume();
+    else onPause();
+  }
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -96,6 +138,43 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
   const displayRatio = dragRatio ?? (duration > 0 ? currentTime / duration : 0);
   const progress = Math.min(displayRatio * 100, 100);
   const displayTime = dragRatio !== null ? dragRatio * duration : currentTime;
+
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Player-wide shortcuts beyond spacebar (handled in App.jsx, since it has
+  // to work with no player content on screen at all). Reads
+  // audioRef.current.currentTime directly rather than depending on the
+  // `currentTime` state var, so this effect doesn't need to reattach on
+  // every timeupdate tick.
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        setShowShortcuts(false);
+        return;
+      }
+      if (isTypingTarget()) return;
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowShortcuts((v) => !v);
+        return;
+      }
+      if (!state.track) return;
+      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+        if (!duration) return;
+        e.preventDefault();
+        const delta = e.code === 'ArrowLeft' ? -5 : 5;
+        const from = audioRef.current?.currentTime ?? 0;
+        onSeek(Math.min(Math.max(from + delta, 0), duration));
+      } else if (e.key === 'n' || e.key === 'N') {
+        if (upcomingCount === 0) return;
+        onNext();
+      } else if (e.key === 'm' || e.key === 'M') {
+        toggleMute();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [state.track, duration, upcomingCount, onSeek, onNext, volume]);
 
   function ratioFromPointer(e) {
     const rect = progressRef.current.getBoundingClientRect();
@@ -155,11 +234,11 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
           </button>
           <button
             className="control-button play-pause"
-            onClick={state.isPlaying ? onPause : onResume}
+            onClick={handlePlayPause}
             disabled={!state.track}
-            title={state.isPlaying ? 'Pause' : 'Lecture'}
+            title={optimisticPlaying ? 'Pause' : 'Lecture'}
           >
-            {state.isPlaying ? <IconPause /> : <IconPlay />}
+            {optimisticPlaying ? <IconPause /> : <IconPlay />}
           </button>
           <button className="control-button" onClick={onNext} disabled={upcomingCount === 0} title="Suivant">
             <IconNext />
@@ -209,8 +288,30 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
             title="Volume"
           />
         </div>
+        <button className="icon-button" onClick={() => setShowShortcuts((v) => !v)} title="Raccourcis clavier (?)">
+          <IconHelp />
+        </button>
         <span className={`connection-dot ${connected ? 'online' : 'offline'}`} title={connected ? 'Connecté' : 'Reconnexion…'} />
       </div>
+
+      {showShortcuts && (
+        <div className="shortcuts-overlay" onClick={() => setShowShortcuts(false)}>
+          <div className="shortcuts-panel" onClick={(e) => e.stopPropagation()}>
+            <h2>Raccourcis clavier</h2>
+            <dl>
+              {SHORTCUTS.map((s) => (
+                <div key={s.keys} className="shortcuts-row">
+                  <dt>{s.keys}</dt>
+                  <dd>{s.label}</dd>
+                </div>
+              ))}
+            </dl>
+            <button className="icon-button shortcuts-close" onClick={() => setShowShortcuts(false)} title="Fermer">
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </footer>
   );
 }
