@@ -1,0 +1,46 @@
+import { Router } from 'express';
+import multer from 'multer';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { musicDir, listTracks, scanLibrary, indexFile, getTrackCover, AUDIO_EXTENSIONS } from '../library.js';
+
+const storage = multer.diskStorage({
+  destination: musicDir,
+  filename: (req, file, cb) => cb(null, `${crypto.randomUUID()}${path.extname(file.originalname)}`),
+});
+
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (AUDIO_EXTENSIONS.has(path.extname(file.originalname).toLowerCase())) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Format non supporté — formats acceptés : ${[...AUDIO_EXTENSIONS].join(', ')}`));
+    }
+  },
+});
+
+export const libraryRouter = Router();
+
+libraryRouter.get('/library', (req, res) => {
+  res.json(listTracks.all());
+});
+
+libraryRouter.post('/library/scan', async (req, res) => {
+  const tracks = await scanLibrary();
+  res.json(tracks);
+});
+
+libraryRouter.post('/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  const track = await indexFile(req.file.filename);
+  res.status(201).json(track);
+});
+
+libraryRouter.get('/tracks/:id/cover', (req, res) => {
+  const row = getTrackCover.get(req.params.id);
+  if (!row?.cover) return res.status(404).end();
+  res.set('Content-Type', row.cover_mime || 'application/octet-stream');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.send(row.cover);
+});
