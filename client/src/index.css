@@ -64,6 +64,52 @@
   box-sizing: border-box;
 }
 
+/* High contrast — layered on top of whichever theme is active, so it only
+   redefines the tokens that need to go harder. Equal specificity to the light
+   block above means source order decides, hence its position here; the
+   combined light+contrast selector below is more specific than both and wins
+   for that pairing. See useDisplaySettings.js. */
+:root[data-contrast='high'] {
+  --bg-base: #000000;
+  --bg-main: #000000;
+  --bg-elevated: #0b0b0b;
+  --bg-hover: #2b2b2b;
+  --bg-highlight: #3a3a3a;
+  --text-primary: #ffffff;
+  --text-secondary: #ededed;
+  --text-muted: #d0d0d0;
+  --border: #7d7d7d;
+  --view-gradient-top: #000000;
+  --shimmer: rgba(255, 255, 255, 0.14);
+}
+
+:root[data-theme='light'][data-contrast='high'] {
+  --bg-base: #ffffff;
+  --bg-main: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-hover: #dedede;
+  --bg-highlight: #c9c9c9;
+  --text-primary: #000000;
+  --text-secondary: #1c1c1c;
+  --text-muted: #333333;
+  --border: #4d4d4d;
+  --view-gradient-top: #ffffff;
+}
+
+/* A colored wash over the content is the opposite of what high contrast is
+   for; App.jsx also stops setting the stops, this covers a stale class. */
+:root[data-contrast='high'] .main.ambient-mesh {
+  background-image: none;
+  background-color: var(--bg-main);
+  animation: none;
+}
+
+/* Everything sized in rem follows this, which is the whole point of the text
+   size control — a living-room screen read from the sofa. */
+:root {
+  font-size: calc(100% * var(--font-scale, 1));
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -324,6 +370,60 @@ select {
   overflow-y: auto;
   background-image: linear-gradient(180deg, var(--view-gradient-top) 0%, var(--bg-main) 320px);
   padding: 24px 32px 120px;
+}
+
+/* Ambient background tinted from the current cover's 3-stop palette
+   (useCoverPalette.js). Registering the stops with @property is what makes
+   them animatable at all: a custom property is an unparsed string by default,
+   so `transition` on it snaps. Declared as <color> it interpolates, which is
+   the whole cross-fade-between-tracks effect — browsers without @property
+   simply get an instant swap, i.e. the behaviour this had before. */
+@property --ambient-1 {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+@property --ambient-2 {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+@property --ambient-3 {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+.main.ambient-mesh {
+  /* Each layer is wider than the element so background-position has somewhere
+     to travel — at the default `auto` size the drift would have no effect. */
+  background-image:
+    radial-gradient(closest-side at 50% 50%, var(--ambient-1) 0%, transparent 100%),
+    radial-gradient(closest-side at 50% 50%, var(--ambient-2) 0%, transparent 100%),
+    radial-gradient(closest-side at 50% 50%, var(--ambient-3) 0%, transparent 100%),
+    linear-gradient(180deg, var(--view-gradient-top) 0%, var(--bg-main) 320px);
+  background-size: 150% 520px, 130% 460px, 165% 560px, auto;
+  background-repeat: no-repeat;
+  background-position: -25% -180px, 60% -140px, 10% -220px, 0 0;
+  transition:
+    --ambient-1 900ms ease,
+    --ambient-2 900ms ease,
+    --ambient-3 900ms ease;
+  animation: ambient-mesh-drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes ambient-mesh-drift {
+  to {
+    background-position: 5% -150px, 25% -190px, -20% -170px, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main.ambient-mesh {
+    animation: none;
+  }
 }
 
 /* Fade the swapped-in view in gently instead of popping — each of
@@ -626,8 +726,10 @@ select {
   white-space: nowrap;
 }
 
+/* rem, not px, so the row's furniture grows with the text size instead of
+   leaving a big font next to a tiny thumbnail. */
 .track-index {
-  width: 24px;
+  width: 1.5rem;
   text-align: center;
   color: var(--text-muted);
   font-size: 0.9rem;
@@ -681,8 +783,8 @@ select {
 }
 
 .track-cover {
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;
+  height: 2.5rem;
   object-fit: cover;
   border-radius: 3px;
   flex-shrink: 0;
@@ -1807,4 +1909,628 @@ select {
     width: 36px;
     height: 36px;
   }
+}
+
+/* "Connecter un appareil" — QR code of the server's LAN URL (JoinQr.jsx) */
+
+.join-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.join-panel {
+  position: relative;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.join-panel h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.join-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+/* Fixed white padding around the symbol so the quiet zone survives on a dark
+   panel — the code itself is deliberately never themed (see JoinQr.jsx). */
+.join-qr {
+  width: 220px;
+  height: 220px;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.join-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.join-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.join-url {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  font-size: 0.85rem;
+  text-align: center;
+  overflow-x: auto;
+  white-space: nowrap;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.join-copy {
+  flex-shrink: 0;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  color: var(--bg-main);
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.join-copy:hover {
+  background: var(--accent-hover);
+}
+
+/* Only rendered when the machine has more than one candidate address (a
+   docker bridge, a VPN) and we can't know which one the guest can reach. */
+.join-interfaces {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.join-interfaces button {
+  padding: 4px 9px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.join-interfaces button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Per-device name shown in other devices' toasts (useDeviceName.js) */
+
+.device-name-item .nav-item-label {
+  min-width: 0;
+}
+
+.device-name-item .nav-item-label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reads as a placeholder rather than an actual name until one is set. */
+.device-name-unset {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.device-name-form {
+  margin: 0;
+}
+
+/* Ambient / screensaver mode — engages after a few idle minutes while
+   something is playing, dismissed by any input (AmbientMode.jsx, useIdle.js) */
+
+.ambient-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above every other overlay, including the reconnect banner (300): this is
+     the one thing that should cover a screen nobody is using. */
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #05060a;
+  animation: ambient-fade-in 1.2s ease;
+}
+
+@keyframes ambient-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.ambient-bg {
+  position: absolute;
+  inset: -60px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(80px) brightness(0.35) saturate(1.3);
+  transform: scale(1.2);
+}
+
+.ambient-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding: 24px;
+  text-align: center;
+  /* Slow drift so a static image doesn't sit on the exact same pixels for
+     hours on an OLED/plasma living-room screen. */
+  animation: ambient-drift 90s ease-in-out infinite alternate;
+}
+
+@keyframes ambient-drift {
+  from {
+    transform: translate(-14px, -10px);
+  }
+  to {
+    transform: translate(14px, 10px);
+  }
+}
+
+.ambient-clock {
+  font-size: clamp(3rem, 11vw, 6rem);
+  font-weight: 200;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.ambient-cover {
+  width: clamp(180px, 34vh, 340px);
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
+}
+
+.ambient-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ambient-cover-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ambient-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 80vw;
+}
+
+.ambient-title {
+  font-size: clamp(1.2rem, 3.4vw, 2rem);
+  color: #fff;
+}
+
+.ambient-artist {
+  font-size: clamp(0.9rem, 2.2vw, 1.2rem);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-overlay {
+    animation: none;
+  }
+
+  .ambient-content {
+    animation: none;
+  }
+}
+
+/* Listening history (HistoryView.jsx) */
+
+.history-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Sits in TrackRow's `children` slot, so it lands between the like button and
+   the "more" button — the only place a per-view extra column can go without
+   changing the shared row markup. */
+.track-played-at {
+  flex-shrink: 0;
+  min-width: 96px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .track-played-at {
+    display: none;
+  }
+}
+
+/* Vinyl cover + live spectrum in the full-screen "now playing" view */
+
+.now-playing-cover.vinyl {
+  position: relative;
+  border-radius: 50%;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  animation: vinyl-spin 22s linear infinite;
+}
+
+/* Freezing rather than removing the animation keeps the cover wherever it
+   stopped — resetting to 0deg would look like the track restarted. */
+.now-playing-cover.vinyl.paused {
+  animation-play-state: paused;
+}
+
+@keyframes vinyl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.vinyl-hole {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 13%;
+  height: 13%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #0a0a0a;
+  box-shadow: 0 0 0 6% rgba(0, 0, 0, 0.35);
+}
+
+.visualizer {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  width: 100%;
+  height: 54px;
+}
+
+.visualizer span {
+  flex: 1;
+  height: 6%;
+  min-width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--accent) 0%, rgba(var(--accent-rgb), 0.35) 100%);
+  /* Smooths the gap between animation frames without fighting the rAF loop
+     that sets these heights. */
+  transition: height 70ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .now-playing-cover.vinyl {
+    animation: none;
+  }
+
+  .visualizer span {
+    transition: none;
+  }
+}
+
+/* Display preferences (useDisplaySettings.js / DisplaySettings.jsx) */
+
+/* Compact density — tighter rows for a library of several hundred titles.
+   Nothing is hidden: the artist line stays, just smaller, because a list you
+   can't identify tracks in isn't denser, it's shorter. */
+:root[data-density='compact'] .track-row {
+  padding: 3px 10px;
+  gap: 9px;
+}
+
+:root[data-density='compact'] .track-cover {
+  width: 2rem;
+  height: 2rem;
+}
+
+:root[data-density='compact'] .track-artist {
+  font-size: 0.72rem;
+}
+
+:root[data-density='compact'] .track-list {
+  gap: 0;
+}
+
+/* Explicit "reduce animations", for the OSes that bury prefers-reduced-motion
+   or don't expose it at all. Deliberately blunt: the app has animations
+   defined in a dozen places and an opt-out that misses some of them isn't
+   worth having. Durations go to ~0 rather than `none` so anything relying on
+   an animation's end state still lands there. */
+:root[data-reduce-motion='1'],
+:root[data-reduce-motion='1'] *,
+:root[data-reduce-motion='1'] *::before,
+:root[data-reduce-motion='1'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Warm light — multiply is what makes this a real blue filter rather than an
+   orange veil: it removes blue from lit pixels and leaves black untouched, so
+   a dark UI mostly keeps its depth instead of turning brown. */
+.warm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  pointer-events: none;
+  background: #ff9a3c;
+  mix-blend-mode: multiply;
+}
+
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.settings-panel {
+  position: relative;
+  width: 420px;
+  max-width: 100%;
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.settings-panel h2 {
+  margin: 0 0 18px;
+  font-size: 1.05rem;
+}
+
+.settings-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+}
+
+.settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-hint {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.settings-control {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.settings-control input[type='range'] {
+  width: 140px;
+  accent-color: var(--accent);
+}
+
+.settings-control input[type='range']:disabled {
+  opacity: 0.4;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.settings-toggle input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.settings-hours {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.82rem;
+}
+
+.settings-hours select {
+  padding: 4px 6px;
+  color: var(--text-primary);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.settings-reset {
+  width: 100%;
+  margin-top: 18px;
+  padding: 9px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.settings-reset:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.settings-reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Bulk actions: selection bar, group-wide buttons, full-screen like */
+
+.selection-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.selection-count {
+  margin-right: 4px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.selection-action {
+  padding: 6px 11px;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.selection-action:hover:not(:disabled) {
+  background: var(--bg-highlight);
+}
+
+.selection-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.selection-action.ghost {
+  margin-left: auto;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* The button carries its own margin-bottom for standalone use (PlaylistView);
+   kept here it would sit 20px higher than its neighbours in this flex row,
+   since flex honours item margins. */
+.group-actions .play-button-large {
+  margin-bottom: 0;
+}
+
+.now-playing-like {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.now-playing-like:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.now-playing-like.liked {
+  color: var(--accent);
+}
+
+/* Settings panel section headings */
+
+.settings-section {
+  margin: 20px 0 2px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.settings-section:first-of-type {
+  margin-top: 0;
+}
+
+/* Marks the one control in this panel that isn't per-device. */
+.settings-shared-note {
+  margin: 0 0 2px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+/* The export button is an <a>, so it needs the button's own box back */
+
+a.selection-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
 }

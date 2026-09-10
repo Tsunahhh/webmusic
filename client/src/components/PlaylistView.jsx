@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import TrackRow, { PLAYLIST_REORDER_DND_TYPE } from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
+import SelectionActions from './SelectionActions.jsx';
 import { useTrackSelection } from '../hooks/useTrackSelection.js';
 import { showToast } from '../toast.js';
 import { SORT_OPTIONS, sortTracks } from '../sort.js';
 import CoverMosaic from './CoverMosaic.jsx';
-import { IconPlay, IconTrash, IconImage } from './icons.jsx';
+import { IconPlay, IconTrash, IconImage, IconDownload } from './icons.jsx';
 
 const COVER_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
 
@@ -31,7 +32,7 @@ export default function PlaylistView({
   // other sort is a read-only view derived from it, so dragging to reorder
   // is only meaningful (and only enabled, see below) while sortBy is 'custom'.
   const sortedTracks = sortTracks(tracks, sortBy);
-  const { selectedIds, handleRowClick, dragIdsFor } = useTrackSelection(sortedTracks);
+  const { selectedIds, handleRowClick, dragIdsFor, clearSelection } = useTrackSelection(sortedTracks);
 
   function load() {
     fetch(`/api/playlists/${playlistId}`)
@@ -206,13 +207,27 @@ export default function PlaylistView({
         </div>
       </div>
 
-      <button
-        className="play-button-large"
-        onClick={() => onPlay(sortedTracks.map((t) => t.id))}
-        disabled={tracks.length === 0}
-      >
-        <IconPlay /> Lire
-      </button>
+      <div className="group-actions">
+        <button
+          className="play-button-large"
+          onClick={() => onPlay(sortedTracks.map((t) => t.id))}
+          disabled={tracks.length === 0}
+        >
+          <IconPlay /> Lire
+        </button>
+        {/* A plain link, not a fetch + blob: the browser already knows how to
+            save a response, and the server's Content-Disposition carries the
+            playlist's real (accented) name, which a client-side download
+            would have to reconstruct. */}
+        <a
+          className="selection-action"
+          href={`/api/playlists/${playlistId}/m3u`}
+          download
+          title="Exporter au format M3U (lisible par VLC et consorts)"
+        >
+          <IconDownload /> Exporter en M3U
+        </a>
+      </div>
 
       {tracks.length === 0 ? (
         <p className="empty-hint">Playlist vide — ajoutez des pistes depuis la bibliothèque</p>
@@ -263,6 +278,13 @@ export default function PlaylistView({
           </ul>
         </>
       )}
+      <SelectionActions
+        ids={Array.from(selectedIds)}
+        playlists={playlists}
+        onEnqueue={onEnqueue}
+        onAddToPlaylist={onAddToPlaylist}
+        onClear={clearSelection}
+      />
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menuItemsFor(menu.trackIds)} onClose={() => setMenu(null)} />
       )}

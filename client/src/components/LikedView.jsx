@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import TrackRow from './TrackRow.jsx';
 import ContextMenu from './ContextMenu.jsx';
+import SelectionActions from './SelectionActions.jsx';
 import { useTrackSelection } from '../hooks/useTrackSelection.js';
 import { SORT_OPTIONS, sortTracks } from '../sort.js';
 import { IconHeart } from './icons.jsx';
@@ -25,7 +26,7 @@ export default function LikedView({ currentTrackId, isPlaying, onPlay, onEnqueue
   }, []);
 
   const sorted = sortTracks(tracks, sortBy);
-  const { selectedIds, handleRowClick, dragIdsFor } = useTrackSelection(sorted);
+  const { selectedIds, handleRowClick, dragIdsFor, clearSelection } = useTrackSelection(sorted);
 
   function playFrom(trackId) {
     const index = sorted.findIndex((t) => t.id === trackId);
@@ -97,6 +98,13 @@ export default function LikedView({ currentTrackId, isPlaying, onPlay, onEnqueue
           </ul>
         </>
       )}
+      <SelectionActions
+        ids={Array.from(selectedIds)}
+        playlists={playlists}
+        onEnqueue={onEnqueue}
+        onAddToPlaylist={onAddToPlaylist}
+        onClear={clearSelection}
+      />
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItemsFor(menu.trackIds)} onClose={() => setMenu(null)} />}
     </div>
   );

@@ -38,20 +38,18 @@ function extractPeaks(channelData) {
 }
 
 // Computes the real amplitude-over-time shape of a track exactly once, then
-// caches it — not a live/continuously-updating analysis. It's derived by
-// independently fetching and decoding the same bytes the <audio> element
-// plays, as a *separate* fetch — never a tap on the live element — so this
-// can never affect actual playback.
+// caches it — not a live/continuously-updating analysis. It's derived from a
+// *separate* fetch of the track's bytes, never a tap on the live <audio>
+// element, so it can't affect playback.
 //
-// /api/stream always serves whatever track is currently playing (see
-// broadcast.js) with no per-track id in the URL, so a fetch started for
-// track A could end up reading bytes for a track the server has since
-// switched to, or get cut short mid-download on a track change (per
-// broadcast.js's "every listener reconnects" behavior on track change). An
-// AbortController cancels the fetch as soon as the track changes, and a
-// result is only cached if trackId is still current once decoding
-// finishes — so a stale/partial download never gets stored under the wrong
-// id, it just silently keeps the decorative placeholder for that attempt.
+// It fetches /api/tracks/:id/audio, which is keyed by track id and therefore
+// always returns the track actually asked for. This used to read /api/stream,
+// whose meaning changes the moment the shared session moves on: a fetch begun
+// for track A could finish holding track B's bytes, or be cut off mid-download
+// by a track change, so the result had to be re-checked against the current
+// track before being cached. Per-track URLs remove that race outright. The
+// AbortController remains, now for the ordinary reason: dropping a download
+// nobody is waiting for any more.
 export function useTrackWaveform(trackId) {
   const [bars, setBars] = useState(() => (trackId && cache.has(trackId) ? cache.get(trackId) : generateWaveform(trackId, BAR_COUNT)));
 
@@ -69,7 +67,7 @@ export function useTrackWaveform(trackId) {
     const controller = new AbortController();
     (async () => {
       try {
-        const res = await fetch('/api/stream', { signal: controller.signal });
+        const res = await fetch(`/api/tracks/${trackId}/audio`, { signal: controller.signal });
         if (!res.ok || controller.signal.aborted) return;
         const buf = await res.arrayBuffer();
         if (controller.signal.aborted) return;
@@ -79,8 +77,8 @@ export function useTrackWaveform(trackId) {
         cache.set(trackId, peaks);
         setBars(peaks);
       } catch {
-        // Aborted (track changed mid-fetch), a truncated download, or a
-        // format the browser's decoder rejects — keep the placeholder.
+        // Aborted (track changed mid-fetch) or a format the browser's decoder
+        // rejects — keep the decorative placeholder.
       }
     })();
 
