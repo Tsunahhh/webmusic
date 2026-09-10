@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { libraryRouter } from './routes/library.js';
 import { playbackRouter } from './routes/playback.js';
 import { playlistsRouter } from './routes/playlists.js';
+import { networkRouter } from './routes/network.js';
 import { attachWsServer } from './wsServer.js';
 import { scanLibrary } from './library.js';
 
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use('/api', libraryRouter);
 app.use('/api', playbackRouter);
 app.use('/api', playlistsRouter);
+app.use('/api', networkRouter);
 
 const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
 if (fs.existsSync(clientDist)) {
