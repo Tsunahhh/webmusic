@@ -3,7 +3,7 @@
 A synchronized web music server: every connected client listens to the *same* live audio broadcast at the same time, so multiple devices/speakers stay in sync playing the same track. It's a shared playback session for a household or LAN party, not a per-client jukebox.
 
 > [!WARNING]
-> **This project is "vibe coded" — built almost entirely through conversational AI pair-programming (Claude Code), with light human review.** It has not gone through a security audit and **has no authentication of any kind**: anyone who can reach the server on your network can control playback, upload files, and edit playlists for everyone. Treat it as a **trusted-LAN-only, hobby-grade project**, not production software. Do not expose it to the open internet (no port-forwarding, no public reverse proxy) without adding real auth first. See [Security & known limitations](#security--known-limitations) below.
+> **This project is "vibe coded" — built almost entirely through conversational AI pair-programming (Claude Code), with human review.** It has not gone through a security audit and **has no authentication of any kind**: anyone who can reach the server on your network can control playback, upload files, and edit playlists for everyone. Treat it as a **trusted-LAN-only, hobby-grade project**, not production software. Do not expose it to the open internet (no port-forwarding, no public reverse proxy) without adding real auth first. See [Security & known limitations](#security--known-limitations) below.
 
 ## Features
 
