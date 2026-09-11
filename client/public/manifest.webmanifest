@@ -1,14 +1,14 @@
 {
   "name": "MusicWeb",
   "short_name": "MusicWeb",
-  "description": "Serveur de musique synchronisé : tous les appareils écoutent la même piste au même moment.",
+  "description": "Synchronized music server: every device plays the same track at the same moment.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#0b0e14",
   "theme_color": "#0b0e14",
-  "lang": "fr",
+  "lang": "en",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

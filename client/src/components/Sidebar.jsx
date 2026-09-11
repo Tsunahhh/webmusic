@@ -13,9 +13,10 @@ import {
   IconQrCode,
   IconUser,
   IconHistory,
-  IconSliders,
   IconUpload,
+  IconLibrary,
 } from './icons.jsx';
+import { useT } from '../i18n.js';
 import { ACCENT_PRESETS } from '../hooks/useAccent.js';
 import { TRACK_DND_TYPE } from './TrackRow.jsx';
 
@@ -44,11 +45,11 @@ export default function Sidebar({
   onDropQueue,
   onImportPlaylist,
   onOpenJoin,
-  onOpenDisplay,
   deviceName,
   onDeviceNameChange,
   className = '',
 }) {
+  const t = useT();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [dragOverId, setDragOverId] = useState(null);
@@ -81,7 +82,7 @@ export default function Sidebar({
       return;
     }
     // An empty name is a normal value, not a rejected one: it puts this
-    // device back to the anonymous "Un autre appareil" wording.
+    // device back to the anonymous "Another device" wording.
     onDeviceNameChange(nameDraft.trim().slice(0, 32));
   }
 
@@ -123,7 +124,7 @@ export default function Sidebar({
         <button
           className="icon-button"
           onClick={onToggleTheme}
-          title={theme === 'dark' ? 'Passer au thème clair' : 'Passer au thème sombre'}
+          title={theme === 'dark' ? t('sidebar.themeToLight') : t('sidebar.themeToDark')}
         >
           {theme === 'dark' ? <IconSun /> : <IconMoon />}
         </button>
@@ -145,18 +146,20 @@ export default function Sidebar({
 
       <button className="nav-item search-trigger" onClick={onOpenSearch}>
         <span className="nav-item-label">
-          <IconSearch /> Rechercher
+          <IconSearch /> {t('nav.search')}
         </span>
         <span className="shortcut-hint">{IS_MAC ? '⌘K' : 'Ctrl K'}</span>
       </button>
 
       <button className={`nav-item ${view.type === 'library' ? 'active' : ''}`} onClick={onSelectLibrary}>
-        Bibliothèque
+        <span className="nav-item-label">
+          <IconLibrary /> {t('nav.library')}
+        </span>
       </button>
 
       {/* Also a drop target, same TRACK_DND_TYPE payload the playlist items
           below read — dragging onto it is the direct equivalent of the menu's
-          "Ajouter à la file". */}
+          "add to queue". */}
       <button
         className={`nav-item ${view.type === 'queue' ? 'active' : ''} ${queueDragOver ? 'drag-over' : ''}`}
         onClick={onSelectQueue}
@@ -175,33 +178,30 @@ export default function Sidebar({
         }}
       >
         <span className="nav-item-label">
-          <IconQueue /> File d'attente
+          <IconQueue /> {t('nav.queue')}
         </span>
         {upcomingCount > 0 && <span className="track-count">{upcomingCount}</span>}
       </button>
 
       <button className={`nav-item ${view.type === 'liked' ? 'active' : ''}`} onClick={onSelectLiked}>
         <span className="nav-item-label">
-          <IconHeart filled={likedCount > 0} /> Titres likés
+          <IconHeart filled={likedCount > 0} /> {t('nav.liked')}
         </span>
         {likedCount > 0 && <span className="track-count">{likedCount}</span>}
       </button>
 
       <button className={`nav-item ${view.type === 'history' ? 'active' : ''}`} onClick={onSelectHistory}>
         <span className="nav-item-label">
-          <IconHistory /> Écouté récemment
+          <IconHistory /> {t('nav.history')}
         </span>
       </button>
 
-      <button className="nav-item" onClick={onOpenDisplay}>
-        <span className="nav-item-label">
-          <IconSliders /> Réglages
-        </span>
-      </button>
-
+      {/* No settings entry here: the panel is opened from the gear pinned to
+          the top-right of the app (see App.jsx), which is reachable from
+          every view without opening the drawer on a phone. */}
       <button className="nav-item" onClick={onOpenJoin}>
         <span className="nav-item-label">
-          <IconQrCode /> Connecter un appareil
+          <IconQrCode /> {t('nav.connectDevice')}
         </span>
       </button>
 
@@ -211,7 +211,7 @@ export default function Sidebar({
             autoFocus
             value={nameDraft}
             maxLength={32}
-            placeholder="Ton nom"
+            placeholder={t('sidebar.yourName')}
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={submitName}
             onKeyDown={(e) => {
@@ -225,11 +225,11 @@ export default function Sidebar({
         <button
           className="nav-item device-name-item"
           onClick={startEditName}
-          title="Le nom que les autres appareils voient quand tu changes la lecture"
+          title={t('sidebar.deviceNameHint')}
         >
           <span className="nav-item-label">
             <IconUser />
-            <span className={deviceName ? '' : 'device-name-unset'}>{deviceName || 'Ton nom'}</span>
+            <span className={deviceName ? '' : 'device-name-unset'}>{deviceName || t('sidebar.yourName')}</span>
           </span>
           <IconEdit />
         </button>
@@ -240,19 +240,19 @@ export default function Sidebar({
           <button
             className="sidebar-section-toggle"
             onClick={togglePlaylistsCollapsed}
-            title={playlistsCollapsed ? 'Déplier les playlists' : 'Replier les playlists'}
+            title={playlistsCollapsed ? t('sidebar.expandPlaylists') : t('sidebar.collapsePlaylists')}
           >
             <IconChevron className={playlistsCollapsed ? 'collapsed' : ''} />
-            <span>Playlists</span>
+            <span>{t('sidebar.playlists')}</span>
           </button>
           <button
             className="icon-button"
             onClick={() => importInputRef.current?.click()}
-            title="Importer une playlist M3U"
+            title={t('sidebar.importM3u')}
           >
             <IconUpload />
           </button>
-          <button className="icon-button" onClick={() => setCreating((v) => !v)} title="Nouvelle playlist">
+          <button className="icon-button" onClick={() => setCreating((v) => !v)} title={t('sidebar.newPlaylist')}>
             <IconPlus />
           </button>
           <input
@@ -278,7 +278,7 @@ export default function Sidebar({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   onBlur={() => !name.trim() && setCreating(false)}
-                  placeholder="Nom de la playlist"
+                  placeholder={t('sidebar.playlistNamePlaceholder')}
                 />
               </form>
             )}
@@ -327,7 +327,7 @@ export default function Sidebar({
                           e.stopPropagation();
                           startRename(p);
                         }}
-                        title="Renommer la playlist"
+                        title={t('sidebar.renamePlaylist')}
                       >
                         <IconEdit />
                       </button>
@@ -337,7 +337,7 @@ export default function Sidebar({
                           e.stopPropagation();
                           onDeletePlaylist(p.id);
                         }}
-                        title="Supprimer la playlist"
+                        title={t('sidebar.deletePlaylist')}
                       >
                         <IconTrash />
                       </button>
@@ -345,7 +345,7 @@ export default function Sidebar({
                   )}
                 </li>
               ))}
-              {playlists.length === 0 && <li className="empty-hint">Aucune playlist</li>}
+              {playlists.length === 0 && <li className="empty-hint">{t('sidebar.noPlaylists')}</li>}
             </ul>
           </>
         )}

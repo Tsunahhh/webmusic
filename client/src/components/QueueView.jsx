@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { formatTime } from '../format.js';
 import { IconTrash } from './icons.jsx';
+import { useT } from '../i18n.js';
 import NowPlayingBars from './NowPlayingBars.jsx';
 
 const REORDER_DND_TYPE = 'application/x-musicweb-upnext-reorder';
@@ -34,6 +35,7 @@ function QueueRow({ track, rowProps, current, isPlaying, children }) {
 }
 
 export default function QueueView({ state, onRemoveFromUpNext, onReorderUpNext }) {
+  const t = useT();
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
   const hasCurrent = Boolean(state.track);
@@ -44,7 +46,7 @@ export default function QueueView({ state, onRemoveFromUpNext, onReorderUpNext }
 
     const fromIndex = Number(e.dataTransfer.getData(REORDER_DND_TYPE));
     if (Number.isNaN(fromIndex)) return;
-    const ids = state.upNext.map((t) => t.id);
+    const ids = state.upNext.map((track) => track.id);
     const [moved] = ids.splice(fromIndex, 1);
     ids.splice(targetIndex, 0, moved);
     onReorderUpNext(ids);
@@ -52,7 +54,7 @@ export default function QueueView({ state, onRemoveFromUpNext, onReorderUpNext }
 
   return (
     <div className="view">
-      <h1>File d'attente</h1>
+      <h1>{t('queue.title')}</h1>
 
       {hasCurrent && (
         <ul className="track-list">
@@ -83,7 +85,7 @@ export default function QueueView({ state, onRemoveFromUpNext, onReorderUpNext }
               <button
                 className="icon-button remove-btn"
                 onClick={() => onRemoveFromUpNext(track.id)}
-                title="Retirer de la file d'attente"
+                title={t('queue.removeFromQueue')}
               >
                 <IconTrash />
               </button>
@@ -101,7 +103,7 @@ export default function QueueView({ state, onRemoveFromUpNext, onReorderUpNext }
       )}
 
       {!hasCurrent && state.upNext.length === 0 && state.queue.length === 0 && (
-        <p className="empty-hint">Rien à suivre pour l'instant</p>
+        <p className="empty-hint">{t('queue.empty')}</p>
       )}
     </div>
   );

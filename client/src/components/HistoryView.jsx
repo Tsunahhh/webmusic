@@ -4,9 +4,10 @@ import ContextMenu from './ContextMenu.jsx';
 import SelectionActions from './SelectionActions.jsx';
 import { useTrackSelection } from '../hooks/useTrackSelection.js';
 import { formatRelativeTime } from '../format.js';
+import { useT } from '../i18n.js';
 import { IconHistory } from './icons.jsx';
 
-// "Écouté récemment" — a virtual list like LikedView, backed by the
+// "Recently played" — a virtual list like LikedView, backed by the
 // play_history table rather than a flag on tracks (see server/src/history.js).
 // The server already collapses repeats to one row per track at its most
 // recent play, so this renders what it's given.
@@ -15,6 +16,7 @@ import { IconHistory } from './icons.jsx';
 // and re-sorting it by title would leave a list with no meaning left. Same
 // reasoning as QueueView, which is also ordered by something intrinsic.
 export default function HistoryView({ currentTrackId, isPlaying, onPlay, onEnqueue, playlists, onAddToPlaylist, onToggleLike }) {
+  const t = useT();
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [menu, setMenu] = useState(null);
@@ -34,20 +36,20 @@ export default function HistoryView({ currentTrackId, isPlaying, onPlay, onEnque
   const { selectedIds, handleRowClick, dragIdsFor, clearSelection } = useTrackSelection(tracks);
 
   function playFrom(trackId) {
-    const index = tracks.findIndex((t) => t.id === trackId);
+    const index = tracks.findIndex((track) => track.id === trackId);
     if (index === -1) return;
-    onPlay([...tracks.slice(index), ...tracks.slice(0, index)].map((t) => t.id));
+    onPlay([...tracks.slice(index), ...tracks.slice(0, index)].map((track) => track.id));
   }
 
   function handleToggleLike(trackId, liked) {
-    setTracks((prev) => prev.map((t) => (t.id === trackId ? { ...t, liked: liked ? 1 : 0 } : t)));
+    setTracks((prev) => prev.map((track) => (track.id === trackId ? { ...track, liked: liked ? 1 : 0 } : track)));
     onToggleLike(trackId, liked);
   }
 
   function menuItemsFor(trackIds) {
-    const items = [{ label: 'Ajouter à la file', onClick: () => onEnqueue(trackIds) }];
+    const items = [{ label: t('menu.addToQueue'), onClick: () => onEnqueue(trackIds) }];
     if (playlists.length > 0) {
-      items.push({ label: 'Ajouter à une playlist', header: true });
+      items.push({ label: t('menu.addToPlaylist'), header: true });
       for (const p of playlists) {
         items.push({ label: p.name, onClick: () => onAddToPlaylist(p.id, trackIds) });
       }
@@ -58,7 +60,7 @@ export default function HistoryView({ currentTrackId, isPlaying, onPlay, onEnque
   return (
     <div className="view">
       <h1 className="history-title">
-        <IconHistory /> Écouté récemment
+        <IconHistory /> {t('history.title')}
       </h1>
       {loading ? (
         <ul className="track-list">
@@ -67,7 +69,7 @@ export default function HistoryView({ currentTrackId, isPlaying, onPlay, onEnque
           ))}
         </ul>
       ) : tracks.length === 0 ? (
-        <p className="empty-hint">Aucune écoute pour l’instant — lancez une piste pour commencer</p>
+        <p className="empty-hint">{t('history.empty')}</p>
       ) : (
         <ul className="track-list">
           {tracks.map((track, i) => (

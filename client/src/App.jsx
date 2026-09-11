@@ -7,6 +7,7 @@ import { useCoverPalette } from './hooks/useCoverPalette.js';
 import { useIdle } from './hooks/useIdle.js';
 import { useDisplaySettings } from './hooks/useDisplaySettings.js';
 import { isTypingTarget } from './keyboard.js';
+import { useT } from './i18n.js';
 import { showToast } from './toast.js';
 import Sidebar from './components/Sidebar.jsx';
 import Library from './components/Library.jsx';
@@ -21,7 +22,7 @@ import ReconnectBanner from './components/ReconnectBanner.jsx';
 import AmbientMode from './components/AmbientMode.jsx';
 import JoinQr from './components/JoinQr.jsx';
 import DisplaySettings from './components/DisplaySettings.jsx';
-import { IconMenu } from './components/icons.jsx';
+import { IconMenu, IconGear } from './components/icons.jsx';
 
 // Long enough that it never interrupts someone browsing the library, short
 // enough that a screen left alone in a living room settles into the ambient
@@ -29,6 +30,7 @@ import { IconMenu } from './components/icons.jsx';
 const AMBIENT_DELAY_MS = 3 * 60 * 1000;
 
 export default function App() {
+  const t = useT();
   const [deviceName, setDeviceName] = useDeviceName();
   const { state, connected, send, listenerCount } = useSocket(deviceName);
   const [theme, toggleTheme] = useTheme();
@@ -118,7 +120,7 @@ export default function App() {
 
   async function deletePlaylist(id) {
     const playlist = playlists.find((p) => p.id === id);
-    // Captured *before* deleting, so "Annuler" can recreate the playlist
+    // Captured *before* deleting, so the toast's "undo" can recreate the playlist
     // with the same name, tracks (in order) and cover — the summary list in
     // `playlists` only has a track count, not the actual track ids.
     const detail = await fetch(`/api/playlists/${id}`)
@@ -133,9 +135,9 @@ export default function App() {
     await fetch(`/api/playlists/${id}`, { method: 'DELETE' });
     if (view.type === 'playlist' && view.id === id) setView({ type: 'library' });
     refreshPlaylists();
-    showToast(playlist ? `Playlist "${playlist.name}" supprimée` : 'Playlist supprimée', {
+    showToast(playlist ? t('toast.playlistDeleted', { name: playlist.name }) : t('toast.playlistDeletedGeneric'), {
       action: {
-        label: 'Annuler',
+        label: t('toast.undo'),
         onClick: async () => {
           if (!detail) return;
           const created = await fetch('/api/playlists', {
@@ -156,7 +158,7 @@ export default function App() {
             await fetch(`/api/playlists/${created.id}/cover`, { method: 'POST', body });
           }
           refreshPlaylists();
-          showToast(`Playlist "${detail.name}" restaurée`);
+          showToast(t('toast.playlistRestored', { name: detail.name }));
         },
       },
     });
@@ -171,16 +173,16 @@ export default function App() {
     const res = await fetch('/api/playlists/import', { method: 'POST', body });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      showToast(data.error || 'Import impossible');
+      showToast(data.error || t('toast.importFailed'));
       return;
     }
     refreshPlaylists();
     setView({ type: 'playlist', id: data.playlist.id });
     // The unmatched count is the part worth surfacing: an import that silently
     // dropped half its entries would otherwise just look like a short playlist.
-    const parts = [`${data.imported} piste${data.imported > 1 ? 's' : ''} importée${data.imported > 1 ? 's' : ''}`];
-    if (data.unmatched > 0) parts.push(`${data.unmatched} introuvable${data.unmatched > 1 ? 's' : ''} dans la bibliothèque`);
-    if (data.duplicates > 0) parts.push(`${data.duplicates} doublon${data.duplicates > 1 ? 's' : ''} ignoré${data.duplicates > 1 ? 's' : ''}`);
+    const parts = [t('toast.imported', { count: data.imported })];
+    if (data.unmatched > 0) parts.push(t('toast.unmatched', { count: data.unmatched }));
+    if (data.duplicates > 0) parts.push(t('toast.duplicates', { count: data.duplicates }));
     showToast(parts.join(' · '));
   }
 
@@ -205,8 +207,12 @@ export default function App() {
     );
     refreshPlaylists();
     const playlist = playlists.find((p) => p.id === Number(playlistId));
-    const label = playlist ? `"${playlist.name}"` : 'la playlist';
-    showToast(trackIds.length > 1 ? `${trackIds.length} pistes ajoutées à ${label}` : `Ajouté à ${label}`);
+    const label = playlist ? `"${playlist.name}"` : t('toast.thePlaylist');
+    showToast(
+      trackIds.length > 1
+        ? t('toast.addedManyToPlaylist', { count: trackIds.length, label })
+        : t('toast.addedToPlaylist', { label })
+    );
   }
 
   // The sole "start playing" action: trackIds is always a full, already-
@@ -218,7 +224,7 @@ export default function App() {
 
   function enqueueNext(trackIds) {
     send('enqueueNext', { trackIds });
-    showToast(trackIds.length > 1 ? `${trackIds.length} pistes ajoutées à la file` : 'Ajouté à la file d’attente');
+    showToast(trackIds.length > 1 ? t('toast.addedManyToQueue', { count: trackIds.length }) : t('toast.addedToQueue'));
   }
 
   const upcomingCount = state.upNext.length + state.queue.length;
@@ -256,6 +262,14 @@ export default function App() {
       <button className="mobile-menu-toggle" onClick={() => setSidebarOpen((v) => !v)} title="Menu">
         <IconMenu />
       </button>
+
+      {/* Pinned to the top-right of the app rather than sitting in the
+          sidebar: the settings are reachable from every view, and on a phone
+          without first opening the drawer. Fixed, so it stays put while the
+          main area scrolls under it. */}
+      <button className="settings-fab" onClick={() => setDisplayOpen(true)} title={t('nav.settings')}>
+        <IconGear />
+      </button>
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
 
       <Sidebar
@@ -284,10 +298,6 @@ export default function App() {
         onDeviceNameChange={setDeviceName}
         onOpenJoin={() => {
           setJoinOpen(true);
-          setSidebarOpen(false);
-        }}
-        onOpenDisplay={() => {
-          setDisplayOpen(true);
           setSidebarOpen(false);
         }}
       />

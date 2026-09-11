@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconSearch } from './icons.jsx';
+import { useT } from '../i18n.js';
 
 // Cmd/Ctrl+K palette searching across tracks *and* playlists at once —
 // unlike Library.jsx's search, which only filters the library list already
 // on screen. Re-fetches the library each time it opens rather than the app
 // holding a copy at all times, since it's the only place that needs it.
 export default function GlobalSearch({ open, onClose, playlists, onPlayTrack, onSelectPlaylist }) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [tracks, setTracks] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -27,7 +29,7 @@ export default function GlobalSearch({ open, onClose, playlists, onPlayTrack, on
   const q = query.trim().toLowerCase();
   const matchedPlaylists = q ? playlists.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 6) : [];
   const matchedTracks = q
-    ? tracks.filter((t) => t.title.toLowerCase().includes(q) || t.artist?.toLowerCase().includes(q)).slice(0, 8)
+    ? tracks.filter((track) => track.title.toLowerCase().includes(q) || track.artist?.toLowerCase().includes(q)).slice(0, 8)
     : [];
   const results = [
     ...matchedPlaylists.map((p) => ({ type: 'playlist', item: p })),
@@ -39,8 +41,8 @@ export default function GlobalSearch({ open, onClose, playlists, onPlayTrack, on
     if (result.type === 'playlist') {
       onSelectPlaylist(result.item.id);
     } else {
-      const index = tracks.findIndex((t) => t.id === result.item.id);
-      if (index !== -1) onPlayTrack([...tracks.slice(index), ...tracks.slice(0, index)].map((t) => t.id));
+      const index = tracks.findIndex((track) => track.id === result.item.id);
+      if (index !== -1) onPlayTrack([...tracks.slice(index), ...tracks.slice(0, index)].map((track) => track.id));
     }
     onClose();
   }
@@ -68,7 +70,7 @@ export default function GlobalSearch({ open, onClose, playlists, onPlayTrack, on
           <input
             ref={inputRef}
             type="text"
-            placeholder="Rechercher un titre, un artiste, une playlist…"
+            placeholder={t('search.placeholder')}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -77,7 +79,7 @@ export default function GlobalSearch({ open, onClose, playlists, onPlayTrack, on
             onKeyDown={handleKeyDown}
           />
         </div>
-        {q && results.length === 0 && <p className="empty-hint">Aucun résultat pour "{query}"</p>}
+        {q && results.length === 0 && <p className="empty-hint">{t('search.noResults', { query })}</p>}
         {results.length > 0 && (
           <ul className="global-search-results">
             {results.map((r, i) => (
@@ -87,7 +89,7 @@ export default function GlobalSearch({ open, onClose, playlists, onPlayTrack, on
                 onMouseEnter={() => setActiveIndex(i)}
                 onClick={() => select(r)}
               >
-                <span className="global-search-result-type">{r.type === 'track' ? 'Piste' : 'Playlist'}</span>
+                <span className="global-search-result-type">{r.type === 'track' ? t('search.track') : t('search.playlist')}</span>
                 <span className="global-search-result-label">{r.type === 'track' ? r.item.title : r.item.name}</span>
                 {r.type === 'track' && r.item.artist && <span className="global-search-result-sub">{r.item.artist}</span>}
               </li>

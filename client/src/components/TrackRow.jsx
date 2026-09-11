@@ -1,6 +1,7 @@
 import { formatTime } from '../format.js';
 import NowPlayingBars from './NowPlayingBars.jsx';
 import { IconMore, IconHeart } from './icons.jsx';
+import { t as translate, useT } from '../i18n.js';
 
 export const TRACK_DND_TYPE = 'application/x-musicweb-track-ids';
 // Distinct from TRACK_DND_TYPE (drag-to-add-to-playlist, read by
@@ -10,10 +11,12 @@ export const TRACK_DND_TYPE = 'application/x-musicweb-track-ids';
 // they're read by different drop targets (see PlaylistView.jsx).
 export const PLAYLIST_REORDER_DND_TYPE = 'application/x-musicweb-playlist-reorder';
 
+// Called from a drag handler rather than during render, so it reads the
+// language through the module-level `t` instead of the hook.
 function setMultiDragImage(e, count) {
   const badge = document.createElement('div');
   badge.className = 'drag-badge';
-  badge.textContent = `${count} pistes`;
+  badge.textContent = translate('track.multiDrag', { count });
   document.body.appendChild(badge);
   e.dataTransfer.setDragImage(badge, 16, 16);
   requestAnimationFrame(() => document.body.removeChild(badge));
@@ -24,7 +27,7 @@ function setMultiDragImage(e, count) {
 // (none vs. a remove-from-playlist button), passed as children. Every row is
 // a drag source (adding a track to a playlist is a drag onto its name in the
 // sidebar — see Sidebar.jsx for the drop side) and opens a menu
-// ("Ajouter à la file" / "Ajouter à une playlist") two ways: right-click, or
+// ("add to queue" / "add to a playlist") two ways: right-click, or
 // tapping the always-visible "more" button — the latter is the only way to
 // reach either action on a touch device, where there's no right-click and no
 // drag-and-drop. `dragIds` is the full set of track ids both drag-to-add and
@@ -55,6 +58,8 @@ export default function TrackRow({
   onReorderDrop,
   dragOverReorder,
 }) {
+  const t = useT();
+
   return (
     <li
       className={`track-row ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${dragOverReorder ? 'drag-over' : ''}`}
@@ -101,7 +106,7 @@ export default function TrackRow({
             e.stopPropagation();
             onToggleLike(track.id, !track.liked);
           }}
-          title={track.liked ? 'Retirer des titres likés' : 'Ajouter aux titres likés'}
+          title={track.liked ? t('track.unlike') : t('track.like')}
         >
           <IconHeart filled={Boolean(track.liked)} />
         </button>
@@ -113,7 +118,7 @@ export default function TrackRow({
           e.stopPropagation();
           onOpenMenu(e, dragIds);
         }}
-        title="Plus d’actions"
+        title={t('track.more')}
       >
         <IconMore />
       </button>

@@ -5,6 +5,7 @@ import SelectionActions from './SelectionActions.jsx';
 import { useTrackSelection } from '../hooks/useTrackSelection.js';
 import { showToast } from '../toast.js';
 import { SORT_OPTIONS, sortTracks } from '../sort.js';
+import { useT } from '../i18n.js';
 import CoverMosaic from './CoverMosaic.jsx';
 import { IconPlay, IconTrash, IconImage, IconDownload } from './icons.jsx';
 
@@ -21,6 +22,7 @@ export default function PlaylistView({
   onAddToPlaylist,
   onToggleLike,
 }) {
+  const t = useT();
   const [playlist, setPlaylist] = useState(null);
   const [menu, setMenu] = useState(null);
   const [coverVersion, setCoverVersion] = useState(0);
@@ -43,13 +45,13 @@ export default function PlaylistView({
   useEffect(load, [playlistId]);
 
   async function removeTrack(trackId) {
-    const track = tracks.find((t) => t.id === trackId);
+    const track = tracks.find((x) => x.id === trackId);
     await fetch(`/api/playlists/${playlistId}/tracks/${trackId}`, { method: 'DELETE' });
     load();
     onChanged?.();
-    showToast(track ? `« ${track.title} » retiré de la playlist` : 'Piste retirée de la playlist', {
+    showToast(track ? t('playlist.trackRemoved', { title: track.title }) : t('playlist.trackRemovedGeneric'), {
       action: {
-        label: 'Annuler',
+        label: t('toast.undo'),
         onClick: async () => {
           await fetch(`/api/playlists/${playlistId}/tracks`, {
             method: 'POST',
@@ -73,7 +75,7 @@ export default function PlaylistView({
       onChanged?.(); // also refreshes the sidebar's playlist list, in case it ever shows covers
     } else {
       const { error } = await res.json().catch(() => ({}));
-      showToast(error || 'Échec de l’envoi de l’image');
+      showToast(error || t('playlist.coverUploadFailed'));
     }
   }
 
@@ -88,9 +90,9 @@ export default function PlaylistView({
   // (in whatever order it's currently sorted/shown), rotated to start there,
   // so playback loops continuously through it.
   function playFrom(trackId) {
-    const index = sortedTracks.findIndex((t) => t.id === trackId);
+    const index = sortedTracks.findIndex((track) => track.id === trackId);
     if (index === -1) return;
-    onPlay([...sortedTracks.slice(index), ...sortedTracks.slice(0, index)].map((t) => t.id));
+    onPlay([...sortedTracks.slice(index), ...sortedTracks.slice(0, index)].map((track) => track.id));
   }
 
   // Wraps the App-level toggleLike (API call + sidebar count) with a local
@@ -99,7 +101,7 @@ export default function PlaylistView({
   function handleToggleLike(trackId, liked) {
     setPlaylist((p) => ({
       ...p,
-      tracks: p.tracks.map((t) => (t.id === trackId ? { ...t, liked: liked ? 1 : 0 } : t)),
+      tracks: p.tracks.map((track) => (track.id === trackId ? { ...track, liked: liked ? 1 : 0 } : track)),
     }));
     onToggleLike(trackId, liked);
   }
@@ -108,9 +110,9 @@ export default function PlaylistView({
   // is the only way to reach either action on a touch device — see
   // TrackRow.jsx).
   function menuItemsFor(trackIds) {
-    const items = [{ label: 'Ajouter à la file', onClick: () => onEnqueue(trackIds) }];
+    const items = [{ label: t('menu.addToQueue'), onClick: () => onEnqueue(trackIds) }];
     if (playlists.length > 0) {
-      items.push({ label: 'Ajouter à une playlist', header: true });
+      items.push({ label: t('menu.addToPlaylist'), header: true });
       for (const p of playlists) {
         items.push({ label: p.name, onClick: () => onAddToPlaylist(p.id, trackIds) });
       }
@@ -124,7 +126,7 @@ export default function PlaylistView({
   // snap back while the PUT is in flight; reloads from the server on failure
   // so a rejected (stale) reorder doesn't leave the UI out of sync.
   async function reorderTracks(trackIds) {
-    setPlaylist((p) => ({ ...p, tracks: trackIds.map((id) => tracks.find((t) => t.id === id)) }));
+    setPlaylist((p) => ({ ...p, tracks: trackIds.map((id) => tracks.find((track) => track.id === id)) }));
     const res = await fetch(`/api/playlists/${playlistId}/tracks/order`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -139,7 +141,7 @@ export default function PlaylistView({
     if (raw === '') return;
     const fromIndex = Number(raw);
     if (Number.isNaN(fromIndex) || fromIndex === targetIndex) return;
-    const ids = tracks.map((t) => t.id);
+    const ids = tracks.map((track) => track.id);
     const [moved] = ids.splice(fromIndex, 1);
     ids.splice(targetIndex, 0, moved);
     reorderTracks(ids);
@@ -151,7 +153,7 @@ export default function PlaylistView({
         <div className="playlist-header">
           <div className="playlist-cover placeholder-large skeleton-row" />
           <div>
-            <span className="eyebrow">Playlist</span>
+            <span className="eyebrow">{t('playlist.eyebrow')}</span>
             <h1 className="skeleton-row skeleton-title">&nbsp;</h1>
           </div>
         </div>
@@ -179,10 +181,10 @@ export default function PlaylistView({
           )}
           <div className="playlist-cover-overlay">
             <IconImage />
-            <span>{playlist.hasCover ? 'Changer' : 'Ajouter une photo'}</span>
+            <span>{playlist.hasCover ? t('playlist.changeCover') : t('playlist.addCover')}</span>
           </div>
           {playlist.hasCover && (
-            <button className="icon-button playlist-cover-remove" onClick={removeCover} title="Retirer la photo">
+            <button className="icon-button playlist-cover-remove" onClick={removeCover} title={t('playlist.removeCover')}>
               <IconTrash />
             </button>
           )}
@@ -199,21 +201,19 @@ export default function PlaylistView({
           />
         </div>
         <div>
-          <span className="eyebrow">Playlist</span>
+          <span className="eyebrow">{t('playlist.eyebrow')}</span>
           <h1>{playlist.name}</h1>
-          <span className="track-count-label">
-            {tracks.length} piste{tracks.length !== 1 ? 's' : ''}
-          </span>
+          <span className="track-count-label">{t('common.trackCount', { count: tracks.length })}</span>
         </div>
       </div>
 
       <div className="group-actions">
         <button
           className="play-button-large"
-          onClick={() => onPlay(sortedTracks.map((t) => t.id))}
+          onClick={() => onPlay(sortedTracks.map((track) => track.id))}
           disabled={tracks.length === 0}
         >
-          <IconPlay /> Lire
+          <IconPlay /> {t('common.play')}
         </button>
         {/* A plain link, not a fetch + blob: the browser already knows how to
             save a response, and the server's Content-Disposition carries the
@@ -223,23 +223,23 @@ export default function PlaylistView({
           className="selection-action"
           href={`/api/playlists/${playlistId}/m3u`}
           download
-          title="Exporter au format M3U (lisible par VLC et consorts)"
+          title={t('playlist.exportM3uTitle')}
         >
-          <IconDownload /> Exporter en M3U
+          <IconDownload /> {t('playlist.exportM3u')}
         </a>
       </div>
 
       {tracks.length === 0 ? (
-        <p className="empty-hint">Playlist vide — ajoutez des pistes depuis la bibliothèque</p>
+        <p className="empty-hint">{t('playlist.empty')}</p>
       ) : (
         <>
           <div className="sort-row">
             <label>
-              Trier par
+              {t('common.sortBy')}
               <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                 {SORT_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {o.value === 'custom' ? 'Ordre de la playlist' : o.label}
+                    {o.value === 'custom' ? t('playlist.customOrder') : t(o.labelKey)}
                   </option>
                 ))}
               </select>
@@ -269,7 +269,7 @@ export default function PlaylistView({
                     e.stopPropagation();
                     removeTrack(track.id);
                   }}
-                  title="Retirer de la playlist"
+                  title={t('playlist.removeTrack')}
                 >
                   <IconTrash />
                 </button>
