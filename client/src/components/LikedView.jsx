@@ -4,6 +4,7 @@ import ContextMenu from './ContextMenu.jsx';
 import SelectionActions from './SelectionActions.jsx';
 import { useTrackSelection } from '../hooks/useTrackSelection.js';
 import { SORT_OPTIONS, sortTracks } from '../sort.js';
+import { useT } from '../i18n.js';
 import { IconHeart } from './icons.jsx';
 
 // A virtual playlist, not a real one in the playlists table — just
@@ -11,6 +12,7 @@ import { IconHeart } from './icons.jsx';
 // tracks. Remounts (and so refetches) every time the sidebar nav switches
 // into this view, same as Library.jsx does for the full library.
 export default function LikedView({ currentTrackId, isPlaying, onPlay, onEnqueue, playlists, onAddToPlaylist, onToggleLike }) {
+  const t = useT();
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState('custom');
@@ -29,15 +31,15 @@ export default function LikedView({ currentTrackId, isPlaying, onPlay, onEnqueue
   const { selectedIds, handleRowClick, dragIdsFor, clearSelection } = useTrackSelection(sorted);
 
   function playFrom(trackId) {
-    const index = sorted.findIndex((t) => t.id === trackId);
+    const index = sorted.findIndex((track) => track.id === trackId);
     if (index === -1) return;
-    onPlay([...sorted.slice(index), ...sorted.slice(0, index)].map((t) => t.id));
+    onPlay([...sorted.slice(index), ...sorted.slice(0, index)].map((track) => track.id));
   }
 
   function menuItemsFor(trackIds) {
-    const items = [{ label: 'Ajouter à la file', onClick: () => onEnqueue(trackIds) }];
+    const items = [{ label: t('menu.addToQueue'), onClick: () => onEnqueue(trackIds) }];
     if (playlists.length > 0) {
-      items.push({ label: 'Ajouter à une playlist', header: true });
+      items.push({ label: t('menu.addToPlaylist'), header: true });
       for (const p of playlists) {
         items.push({ label: p.name, onClick: () => onAddToPlaylist(p.id, trackIds) });
       }
@@ -50,13 +52,13 @@ export default function LikedView({ currentTrackId, isPlaying, onPlay, onEnqueue
   // liked anymore" means "gone from this page", not just a flipped icon.
   function handleToggleLike(trackId, liked) {
     onToggleLike(trackId, liked);
-    if (!liked) setTracks((prev) => prev.filter((t) => t.id !== trackId));
+    if (!liked) setTracks((prev) => prev.filter((track) => track.id !== trackId));
   }
 
   return (
     <div className="view">
       <h1 className="liked-title">
-        <IconHeart filled /> Titres likés
+        <IconHeart filled /> {t('liked.title')}
       </h1>
       {loading ? (
         <ul className="track-list">
@@ -65,16 +67,16 @@ export default function LikedView({ currentTrackId, isPlaying, onPlay, onEnqueue
           ))}
         </ul>
       ) : tracks.length === 0 ? (
-        <p className="empty-hint">Aucun titre liké — cliquez le cœur sur une piste pour l’ajouter ici</p>
+        <p className="empty-hint">{t('liked.empty')}</p>
       ) : (
         <>
           <div className="sort-row">
             <label>
-              Trier par
+              {t('common.sortBy')}
               <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                 {SORT_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {o.label}
+                    {t(o.labelKey)}
                   </option>
                 ))}
               </select>

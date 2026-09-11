@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useT } from '../i18n.js';
 
 // Only appears after a *sustained* WS outage — a normal, brief blip (wifi
 // hiccup, laptop waking up) already reconnects silently within a second or
@@ -8,6 +9,7 @@ import { useEffect, useState } from 'react';
 const DELAY_MS = 3000;
 
 export default function ReconnectBanner({ connected }) {
+  const t = useT();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export default function ReconnectBanner({ connected }) {
   return (
     <div className="reconnect-banner">
       <span className="connection-dot" />
-      Connexion perdue — tentative de reconnexion en cours…
+      {t('connection.lost')}
     </div>
   );
 }

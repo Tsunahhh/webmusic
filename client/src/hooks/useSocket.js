@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { showToast } from '../toast.js';
+import { t } from '../i18n.js';
 
 // Owns the control-channel WebSocket: keeps `state` (current track,
 // isPlaying, positionSeconds) mirrored from the server and exposes `send`
@@ -66,11 +67,13 @@ export function useSocket(deviceName) {
           const next = msg.state;
           // Falls back to the anonymous wording whenever that device hasn't
           // named itself — every sentence below reads the same either way.
-          const who = msg.originClientName || 'Un autre appareil';
+          const who = msg.originClientName || t('remote.someone');
           if (prev.track?.id !== next.track?.id) {
-            showToast(next.track ? `${who} a lancé « ${next.track.title} »` : `${who} a arrêté la lecture`);
+            showToast(
+              next.track ? t('remote.started', { who, title: next.track.title }) : t('remote.stopped', { who })
+            );
           } else if (prev.isPlaying !== next.isPlaying) {
-            showToast(next.isPlaying ? `${who} a repris la lecture` : `${who} a mis en pause`);
+            showToast(next.isPlaying ? t('remote.resumed', { who }) : t('remote.paused', { who }));
           }
         }
 

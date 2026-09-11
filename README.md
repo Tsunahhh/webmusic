@@ -19,7 +19,9 @@ A synchronized web music server: every connected client listens to the *same* li
 
 **Interface** — responsive, with a mobile drawer, drag-and-drop, right-click and tap-friendly context menus. Light/dark themes with a pickable accent colour, a cover-tinted animated background that cross-fades between tracks, a full-screen "now playing" view with a live spectrum and a spinning vinyl, and an ambient/screensaver mode after a few idle minutes.
 
-**Comfort settings** (per device) — display density, text size, high contrast, an explicit reduce-motion switch, ambient background intensity, and a scheduled warm-light filter for the evening.
+**Languages** — the interface is available in English (default), French, Spanish, German, Japanese and Russian, switchable from the settings panel (the gear at the top right). Like the volume and the theme, the choice is per device, so guests joining the same session can each read their own language.
+
+**Comfort settings** (per device) — display density, text size, high contrast, an explicit reduce-motion switch, ambient background intensity, and a scheduled warm-light filter for the evening. All of it lives in one panel, opened from the gear pinned to the top-right corner.
 
 **Installable** — web app manifest and icons for "add to home screen", with the app shell cached by a service worker (audio is always streamed, never cached). Note that service workers need a secure context, so the offline shell only activates on `localhost` or behind HTTPS — see [Security & known limitations](#security--known-limitations).
 

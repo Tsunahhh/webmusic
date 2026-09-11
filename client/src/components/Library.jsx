@@ -5,6 +5,7 @@ import SelectionActions from './SelectionActions.jsx';
 import CoverMosaic from './CoverMosaic.jsx';
 import { useTrackSelection } from '../hooks/useTrackSelection.js';
 import { SORT_OPTIONS, sortTracks } from '../sort.js';
+import { useT } from '../i18n.js';
 import { IconPlay } from './icons.jsx';
 
 // Buckets tracks by a tag field (album/artist), tracks missing the tag land
@@ -40,6 +41,7 @@ function GridTile({ label, sublabel, coverTrack, mosaicTracks, circle, onClick }
 }
 
 export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, playlists, onAddToPlaylist, onToggleLike }) {
+  const t = useT();
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -47,7 +49,7 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
   const [menu, setMenu] = useState(null);
   const [mode, setMode] = useState('list'); // 'list' | 'albums' | 'artists'
   const [activeGroup, setActiveGroup] = useState(null); // { type: 'album'|'artist', key, tracks } | null
-  const [groupMenu, setGroupMenu] = useState(null); // playlist picker for the group-wide "tout ajouter"
+  const [groupMenu, setGroupMenu] = useState(null); // playlist picker for the group-wide "add everything"
 
   useEffect(() => {
     fetch('/api/library')
@@ -62,8 +64,11 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
   // album/artist detail showing from whichever grid was open before.
   useEffect(() => setActiveGroup(null), [mode]);
 
-  const albumGroups = useMemo(() => groupTracks(tracks, 'album', 'Album inconnu'), [tracks]);
-  const artistGroups = useMemo(() => groupTracks(tracks, 'artist', 'Artiste inconnu'), [tracks]);
+  // The "unknown" bucket label is translated, so these have to recompute on a
+  // language change too — hence `t` in the dependency lists (it's a stable
+  // reference; what changes is the render it's read in).
+  const albumGroups = useMemo(() => groupTracks(tracks, 'album', t('library.unknownAlbum')), [tracks, t]);
+  const artistGroups = useMemo(() => groupTracks(tracks, 'artist', t('library.unknownArtist')), [tracks, t]);
 
   // Sort reorders the whole library (what gets played), search only filters
   // what's *shown* — playFrom below always rotates over playbackOrder, not
@@ -71,7 +76,7 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
   const sortedTracks = sortTracks(tracks, sortBy);
   const q = query.trim().toLowerCase();
   const filtered = q
-    ? sortedTracks.filter((t) => t.title.toLowerCase().includes(q) || t.artist?.toLowerCase().includes(q))
+    ? sortedTracks.filter((track) => track.title.toLowerCase().includes(q) || track.artist?.toLowerCase().includes(q))
     : sortedTracks;
 
   // Drilled into one album/artist tile: both what's shown and what plays
@@ -86,16 +91,16 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
   const { selectedIds, handleRowClick, dragIdsFor, clearSelection } = useTrackSelection(displayedTracks);
 
   function playFrom(trackId) {
-    const index = playbackOrder.findIndex((t) => t.id === trackId);
+    const index = playbackOrder.findIndex((track) => track.id === trackId);
     if (index === -1) return;
-    onPlay([...playbackOrder.slice(index), ...playbackOrder.slice(0, index)].map((t) => t.id));
+    onPlay([...playbackOrder.slice(index), ...playbackOrder.slice(0, index)].map((track) => track.id));
   }
 
   // Wraps the App-level toggleLike (API call + sidebar count) with a local
   // optimistic update of this component's own track copy, so the row's
   // heart icon (driven by track.liked) flips immediately.
   function handleToggleLike(trackId, liked) {
-    setTracks((prev) => prev.map((t) => (t.id === trackId ? { ...t, liked: liked ? 1 : 0 } : t)));
+    setTracks((prev) => prev.map((track) => (track.id === trackId ? { ...track, liked: liked ? 1 : 0 } : track)));
     onToggleLike(trackId, liked);
   }
 
@@ -103,9 +108,9 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
   // is the only way to reach either action on a touch device — see
   // TrackRow.jsx).
   function menuItemsFor(trackIds) {
-    const items = [{ label: 'Ajouter à la file', onClick: () => onEnqueue(trackIds) }];
+    const items = [{ label: t('menu.addToQueue'), onClick: () => onEnqueue(trackIds) }];
     if (playlists.length > 0) {
-      items.push({ label: 'Ajouter à une playlist', header: true });
+      items.push({ label: t('menu.addToPlaylist'), header: true });
       for (const p of playlists) {
         items.push({ label: p.name, onClick: () => onAddToPlaylist(p.id, trackIds) });
       }
@@ -143,48 +148,47 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
       {activeGroup ? (
         <>
           <button className="grid-back" onClick={() => setActiveGroup(null)}>
-            ← {activeGroup.type === 'album' ? 'Albums' : 'Artistes'}
+            ← {activeGroup.type === 'album' ? t('library.modeAlbums') : t('library.modeArtists')}
           </button>
           <div className="playlist-header">
-            {activeGroup.tracks.find((t) => t.hasCover) ? (
+            {activeGroup.tracks.find((track) => track.hasCover) ? (
               <img
                 className="playlist-cover"
-                src={`/api/tracks/${activeGroup.tracks.find((t) => t.hasCover).id}/cover`}
+                src={`/api/tracks/${activeGroup.tracks.find((track) => track.hasCover).id}/cover`}
                 alt=""
               />
             ) : (
               <CoverMosaic tracks={activeGroup.tracks} className="playlist-cover" />
             )}
             <div>
-              <span className="eyebrow">{activeGroup.type === 'album' ? 'Album' : 'Artiste'}</span>
+              <span className="eyebrow">{activeGroup.type === 'album' ? t('library.album') : t('library.artist')}</span>
               <h1>{activeGroup.key}</h1>
-              <span className="track-count-label">
-                {activeGroup.tracks.length} piste{activeGroup.tracks.length !== 1 ? 's' : ''}
-              </span>
+              <span className="track-count-label">{t('common.trackCount', { count: activeGroup.tracks.length })}</span>
             </div>
           </div>
           <div className="group-actions">
-            <button className="play-button-large" onClick={() => onPlay(playbackOrder.map((t) => t.id))}>
-              <IconPlay /> Lire
+            <button className="play-button-large" onClick={() => onPlay(playbackOrder.map((track) => track.id))}>
+              <IconPlay /> {t('common.play')}
             </button>
             {/* Acts on the whole album/artist, independently of any row
-                selection — "tout" here means the group, not the selection. */}
+                selection — "everything" here means the group, not the
+                selection. */}
             <button
               className="selection-action"
-              onClick={() => onEnqueue(playbackOrder.map((t) => t.id))}
+              onClick={() => onEnqueue(playbackOrder.map((track) => track.id))}
             >
-              Tout ajouter à la file
+              {t('library.addAllToQueue')}
             </button>
             <button
               className="selection-action"
               disabled={playlists.length === 0}
-              title={playlists.length === 0 ? 'Aucune playlist' : undefined}
+              title={playlists.length === 0 ? t('common.noPlaylist') : undefined}
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 setGroupMenu({ x: rect.left, y: rect.bottom + 4 });
               }}
             >
-              Tout ajouter à une playlist
+              {t('library.addAllToPlaylist')}
             </button>
           </div>
           {renderTrackList(playbackOrder)}
@@ -192,16 +196,16 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
       ) : (
         <>
           <div className="view-header-row">
-            <h1>Bibliothèque</h1>
+            <h1>{t('library.title')}</h1>
             <div className="mode-switch">
               <button className={mode === 'list' ? 'active' : ''} onClick={() => setMode('list')}>
-                Liste
+                {t('library.modeList')}
               </button>
               <button className={mode === 'albums' ? 'active' : ''} onClick={() => setMode('albums')}>
-                Albums
+                {t('library.modeAlbums')}
               </button>
               <button className={mode === 'artists' ? 'active' : ''} onClick={() => setMode('artists')}>
-                Artistes
+                {t('library.modeArtists')}
               </button>
             </div>
           </div>
@@ -213,30 +217,30 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
               ))}
             </ul>
           ) : tracks.length === 0 ? (
-            <p className="empty-hint">Aucune piste — ajoutez des fichiers dans server/music</p>
+            <p className="empty-hint">{t('library.empty')}</p>
           ) : mode === 'list' ? (
             <>
               <div className="library-toolbar">
                 <input
                   className="search-input"
                   type="search"
-                  placeholder="Rechercher un titre ou un artiste"
+                  placeholder={t('library.searchPlaceholder')}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
                 <label className="sort-row">
-                  Trier par
+                  {t('common.sortBy')}
                   <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                     {SORT_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
-                        {o.label}
+                        {t(o.labelKey)}
                       </option>
                     ))}
                   </select>
                 </label>
               </div>
               {filtered.length === 0 ? (
-                <p className="empty-hint">Aucun résultat pour "{query}"</p>
+                <p className="empty-hint">{t('library.noResults', { query })}</p>
               ) : (
                 renderTrackList(filtered)
               )}
@@ -247,8 +251,8 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
                 <GridTile
                   key={g.key}
                   label={g.key}
-                  sublabel={mode === 'albums' ? g.tracks[0]?.artist : `${g.tracks.length} piste${g.tracks.length !== 1 ? 's' : ''}`}
-                  coverTrack={mode === 'albums' ? g.tracks.find((t) => t.hasCover) : null}
+                  sublabel={mode === 'albums' ? g.tracks[0]?.artist : t('common.trackCount', { count: g.tracks.length })}
+                  coverTrack={mode === 'albums' ? g.tracks.find((track) => track.hasCover) : null}
                   mosaicTracks={g.tracks}
                   circle={mode === 'artists'}
                   onClick={() => openGroup(mode === 'albums' ? 'album' : 'artist', g)}
@@ -271,7 +275,7 @@ export default function Library({ currentTrackId, isPlaying, onPlay, onEnqueue, 
           y={groupMenu.y}
           items={playlists.map((p) => ({
             label: p.name,
-            onClick: () => onAddToPlaylist(p.id, playbackOrder.map((t) => t.id)),
+            onClick: () => onAddToPlaylist(p.id, playbackOrder.map((track) => track.id)),
           }))}
           onClose={() => setGroupMenu(null)}
         />

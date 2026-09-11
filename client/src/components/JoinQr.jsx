@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import qrcode from 'qrcode-generator';
 import { showToast } from '../toast.js';
+import { t as translate, useT } from '../i18n.js';
 
 // Quiet zone required around a QR symbol for a scanner to lock onto it — 4
 // modules is the spec minimum, and skipping it is the usual reason a code
@@ -34,7 +35,7 @@ async function copyUrl(url) {
   try {
     if (navigator.clipboard) {
       await navigator.clipboard.writeText(url);
-      showToast('Adresse copiée');
+      showToast(translate('join.copied'));
       return;
     }
     const field = document.createElement('textarea');
@@ -46,9 +47,9 @@ async function copyUrl(url) {
     field.select();
     const ok = document.execCommand('copy');
     document.body.removeChild(field);
-    showToast(ok ? 'Adresse copiée' : 'Copie impossible — sélectionnez l’adresse à la main');
+    showToast(ok ? translate('join.copied') : translate('join.copyFailed'));
   } catch {
-    showToast('Copie impossible — sélectionnez l’adresse à la main');
+    showToast(translate('join.copyFailed'));
   }
 }
 
@@ -57,6 +58,7 @@ async function copyUrl(url) {
 // across a room. Display-only: it just renders GET /api/network and changes
 // no shared state.
 export default function JoinQr({ open, onClose }) {
+  const t = useT();
   const [addresses, setAddresses] = useState(null); // null = still loading
   const [selected, setSelected] = useState(0);
 
@@ -93,34 +95,30 @@ export default function JoinQr({ open, onClose }) {
   return (
     <div className="join-overlay" onClick={onClose}>
       <div className="join-panel" onClick={(e) => e.stopPropagation()}>
-        <button className="icon-button join-close" onClick={onClose} title="Fermer">
+        <button className="icon-button join-close" onClick={onClose} title={t('common.close')}>
           ×
         </button>
-        <h2>Connecter un appareil</h2>
+        <h2>{t('join.title')}</h2>
 
-        {addresses === null && <p className="empty-hint">Recherche de l’adresse…</p>}
+        {addresses === null && <p className="empty-hint">{t('join.searching')}</p>}
 
-        {addresses?.length === 0 && (
-          <p className="empty-hint">
-            Aucune adresse réseau trouvée — cette machine n’est peut-être connectée à aucun réseau local.
-          </p>
-        )}
+        {addresses?.length === 0 && <p className="empty-hint">{t('join.noAddress')}</p>}
 
         {qr && (
           <>
             {/* Always dark-on-light, in both themes: scanners expect that
                 polarity and many phone cameras simply fail on an inverted
                 code, so this one square deliberately ignores the theme. */}
-            <svg className="join-qr" viewBox={`0 0 ${span} ${span}`} role="img" aria-label={`Code QR pour ${current.url}`}>
+            <svg className="join-qr" viewBox={`0 0 ${span} ${span}`} role="img" aria-label={t('join.qrAlt', { url: current.url })}>
               <rect width={span} height={span} fill="#ffffff" />
               <path d={modulePath(qr)} transform={`translate(${QUIET_ZONE} ${QUIET_ZONE})`} fill="#000000" />
             </svg>
 
-            <p className="join-hint">Scannez ce code, ou saisissez l’adresse :</p>
+            <p className="join-hint">{t('join.hint')}</p>
             <div className="join-url-row">
               <code className="join-url">{current.url}</code>
               <button className="join-copy" onClick={() => copyUrl(current.url)}>
-                Copier
+                {t('join.copy')}
               </button>
             </div>
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ContextMenu from './ContextMenu.jsx';
+import { useT } from '../i18n.js';
 
 // Bar shown while a multi-selection is active, so bulk actions don't require
 // discovering that right-click (or the row's "more" button) applies to the
@@ -9,11 +10,12 @@ import ContextMenu from './ContextMenu.jsx';
 // Rendered by every list view that uses useTrackSelection; `ids` is whatever
 // that view currently has selected.
 export default function SelectionActions({ ids, playlists, onEnqueue, onAddToPlaylist, onClear }) {
+  const t = useT();
   const [menu, setMenu] = useState(null);
 
   if (ids.length === 0) return null;
 
-  const label = `${ids.length} piste${ids.length > 1 ? 's' : ''} sélectionnée${ids.length > 1 ? 's' : ''}`;
+  const label = t('selection.count', { count: ids.length });
 
   // Clearing after a bulk action: leaving the bar up over a selection the user
   // has just acted on invites doing it twice by accident.
@@ -31,21 +33,21 @@ export default function SelectionActions({ ids, playlists, onEnqueue, onAddToPla
     <div className="selection-bar">
       <span className="selection-count">{label}</span>
       <button className="selection-action" onClick={enqueue}>
-        Tout ajouter à la file
+        {t('selection.addAllToQueue')}
       </button>
       <button
         className="selection-action"
         disabled={playlists.length === 0}
-        title={playlists.length === 0 ? 'Aucune playlist' : undefined}
+        title={playlists.length === 0 ? t('common.noPlaylist') : undefined}
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           setMenu({ x: rect.left, y: rect.bottom + 4 });
         }}
       >
-        Tout ajouter à une playlist
+        {t('selection.addAllToPlaylist')}
       </button>
       <button className="selection-action ghost" onClick={onClear}>
-        Désélectionner
+        {t('selection.clear')}
       </button>
       {menu && (
         <ContextMenu

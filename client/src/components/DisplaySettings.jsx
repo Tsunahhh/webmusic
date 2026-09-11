@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { DISPLAY_DEFAULTS } from '../hooks/useDisplaySettings.js';
+import { LANGUAGES, setLanguage, useLanguage, useT } from '../i18n.js';
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const hourLabel = (h) => `${String(h).padStart(2, '0')}:00`;
@@ -25,12 +26,19 @@ function Toggle({ checked, onChange, label }) {
   );
 }
 
-// Every control here is a per-device display preference (see
-// useDisplaySettings.js) — nothing in this panel touches the shared session,
-// so changing anything is safe mid-playback and affects only this screen.
-// Changes apply live rather than on a "save": each one is visible in the panel
-// itself, which is the only honest way to pick a text size or a tint strength.
+// Every control here is a per-device preference (the language, see i18n.js,
+// and the display settings, see useDisplaySettings.js) except the crossfade
+// at the bottom, which is explicitly flagged as shared — nothing else in this
+// panel touches the shared session, so changing it is safe mid-playback and
+// affects only this screen. Changes apply live rather than on a "save": each
+// one is visible in the panel itself, which is the only honest way to pick a
+// language, a text size or a tint strength.
+//
+// Opened from the gear pinned to the top-right of the app (see App.jsx).
 export default function DisplaySettings({ open, onClose, settings, onChange, onReset, theme, crossfadeSeconds, onCrossfadeChange }) {
+  const t = useT();
+  const language = useLanguage();
+
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e) {
@@ -45,31 +53,53 @@ export default function DisplaySettings({ open, onClose, settings, onChange, onR
   return (
     <div className="settings-overlay" onClick={onClose}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
-        <button className="icon-button settings-close" onClick={onClose} title="Fermer">
+        <button className="icon-button settings-close" onClick={onClose} title={t('common.close')}>
           ×
         </button>
-        <h2>Réglages</h2>
+        <h2>{t('settings.title')}</h2>
 
-        <h3 className="settings-section">Affichage</h3>
+        <h3 className="settings-section">{t('settings.sectionGeneral')}</h3>
 
-        <Row label="Densité" hint="Hauteur des lignes dans les listes">
+        {/* Each option is written in its own language, never translated into
+            the current one — landing in a language you can't read is exactly
+            when this control has to stay usable. */}
+        <Row label={t('settings.language')} hint={t('settings.languageHint')}>
+          <select
+            className="settings-select"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+
+        <h3 className="settings-section">{t('settings.sectionDisplay')}</h3>
+
+        <Row label={t('settings.density')} hint={t('settings.densityHint')}>
           <div className="mode-switch">
             <button
               className={settings.density === 'comfortable' ? 'active' : ''}
               onClick={() => onChange({ density: 'comfortable' })}
             >
-              Confortable
+              {t('settings.densityComfortable')}
             </button>
             <button
               className={settings.density === 'compact' ? 'active' : ''}
               onClick={() => onChange({ density: 'compact' })}
             >
-              Compact
+              {t('settings.densityCompact')}
             </button>
           </div>
         </Row>
 
-        <Row label="Taille du texte" hint={`${Math.round(settings.fontScale * 100)} %`}>
+        <Row
+          label={t('settings.textSize')}
+          hint={t('settings.percent', { percent: Math.round(settings.fontScale * 100) })}
+        >
           <input
             type="range"
             min="0.85"
@@ -80,30 +110,30 @@ export default function DisplaySettings({ open, onClose, settings, onChange, onR
           />
         </Row>
 
-        <Row label="Contraste" hint="Couleurs plus tranchées, fond ambiant désactivé">
+        <Row label={t('settings.contrast')} hint={t('settings.contrastHint')}>
           <Toggle
             checked={settings.highContrast}
             onChange={(highContrast) => onChange({ highContrast })}
-            label="Contraste élevé"
+            label={t('settings.contrastToggle')}
           />
         </Row>
 
-        <Row label="Animations" hint="En plus du réglage système, que certains OS n’exposent pas">
+        <Row label={t('settings.animations')} hint={t('settings.animationsHint')}>
           <Toggle
             checked={settings.reduceMotion}
             onChange={(reduceMotion) => onChange({ reduceMotion })}
-            label="Réduire les animations"
+            label={t('settings.animationsToggle')}
           />
         </Row>
 
         <Row
-          label="Fond ambiant"
+          label={t('settings.ambient')}
           hint={
             theme === 'light'
-              ? 'Thème sombre uniquement'
+              ? t('settings.ambientDarkOnly')
               : settings.highContrast
-                ? 'Désactivé par le contraste élevé'
-                : `${Math.round(settings.ambientIntensity * 100)} % d’intensité`
+                ? t('settings.ambientDisabled')
+                : t('settings.ambientIntensity', { percent: Math.round(settings.ambientIntensity * 100) })
           }
         >
           <input
@@ -117,13 +147,17 @@ export default function DisplaySettings({ open, onClose, settings, onChange, onR
           />
         </Row>
 
-        <Row label="Lumière chaude" hint="Filtre le bleu le soir, comme un mode nuit">
-          <Toggle checked={settings.warmLight} onChange={(warmLight) => onChange({ warmLight })} label="Activer" />
+        <Row label={t('settings.warmLight')} hint={t('settings.warmLightHint')}>
+          <Toggle
+            checked={settings.warmLight}
+            onChange={(warmLight) => onChange({ warmLight })}
+            label={t('settings.enable')}
+          />
         </Row>
 
         {settings.warmLight && (
           <>
-            <Row label="Plage horaire" hint="Peut passer minuit">
+            <Row label={t('settings.schedule')} hint={t('settings.scheduleHint')}>
               <div className="settings-hours">
                 <select value={settings.warmFrom} onChange={(e) => onChange({ warmFrom: Number(e.target.value) })}>
                   {HOURS.map((h) => (
@@ -142,7 +176,10 @@ export default function DisplaySettings({ open, onClose, settings, onChange, onR
                 </select>
               </div>
             </Row>
-            <Row label="Intensité du filtre" hint={`${Math.round(settings.warmStrength * 100)} %`}>
+            <Row
+              label={t('settings.filterStrength')}
+              hint={t('settings.percent', { percent: Math.round(settings.warmStrength * 100) })}
+            >
               <input
                 type="range"
                 min="0.05"
@@ -155,17 +192,15 @@ export default function DisplaySettings({ open, onClose, settings, onChange, onR
           </>
         )}
 
-        <h3 className="settings-section">Lecture</h3>
-        <p className="settings-shared-note">
-          Partagé avec tous les appareils, comme la lecture aléatoire — au contraire des réglages ci-dessus.
-        </p>
+        <h3 className="settings-section">{t('settings.sectionPlayback')}</h3>
+        <p className="settings-shared-note">{t('settings.sharedNote')}</p>
 
         <Row
-          label="Fondu enchaîné"
+          label={t('settings.crossfade')}
           hint={
             crossfadeSeconds === 0
-              ? 'Désactivé — coupure nette entre les pistes'
-              : `${crossfadeSeconds} s de recouvrement`
+              ? t('settings.crossfadeOff')
+              : t('settings.crossfadeSeconds', { seconds: crossfadeSeconds })
           }
         >
           <input
@@ -183,7 +218,7 @@ export default function DisplaySettings({ open, onClose, settings, onChange, onR
           onClick={onReset}
           disabled={Object.keys(DISPLAY_DEFAULTS).every((k) => settings[k] === DISPLAY_DEFAULTS[k])}
         >
-          Rétablir les réglages par défaut
+          {t('settings.reset')}
         </button>
       </div>
     </div>

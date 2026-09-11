@@ -6,6 +6,7 @@ import { useTrackWaveform } from '../hooks/useTrackWaveform.js';
 import { useMediaSession } from '../hooks/useMediaSession.js';
 import { useAudioAnalyser, BAR_COUNT } from '../hooks/useAudioAnalyser.js';
 import { useAudioDecks } from '../hooks/useAudioDecks.js';
+import { useT } from '../i18n.js';
 import {
   IconPlay,
   IconPause,
@@ -22,23 +23,22 @@ import {
   IconHeart,
 } from './icons.jsx';
 
+// `keys` is either a literal keycap (untranslated: the key is engraved that
+// way whatever the UI language) or a catalog key for the ones that are words
+// — "Space"/"Espace"/"Пробел".
 const SHORTCUTS = [
-  { keys: 'Espace', label: 'Lecture / pause' },
-  { keys: '← / →', label: 'Reculer / avancer de 5 s' },
-  { keys: 'N', label: 'Piste suivante' },
-  { keys: 'M', label: 'Couper / rétablir le son' },
-  { keys: '?', label: 'Afficher / masquer cette aide' },
+  { keysKey: 'shortcuts.keySpace', labelKey: 'shortcuts.playPause' },
+  { keys: '← / →', labelKey: 'shortcuts.seek' },
+  { keys: 'N', labelKey: 'shortcuts.next' },
+  { keys: 'M', labelKey: 'shortcuts.mute' },
+  { keys: '?', labelKey: 'shortcuts.help' },
 ];
 
 // off → all → one → off. 'all' is the original always-on loop through the
 // current context; 'off' plays through it once and stops; 'one' repeats
 // just the current track — see playbackState.js for the server-side rules.
 const NEXT_REPEAT_MODE = { off: 'all', all: 'one', one: 'off' };
-const REPEAT_TITLE = {
-  off: 'Activer la répétition',
-  all: 'Répéter le contexte (cliquer pour répéter une seule piste)',
-  one: 'Répéter une seule piste (cliquer pour désactiver)',
-};
+const REPEAT_TITLE_KEY = { off: 'player.repeatOff', all: 'player.repeatAll', one: 'player.repeatOne' };
 
 const SLEEP_TIMER_OPTIONS = [15, 30, 45, 60];
 
@@ -53,6 +53,7 @@ const SEEK_STEP_SECONDS = 5;
 // under the incoming one) and why the crossfade length comes from the shared
 // playback state rather than a local preference.
 export default function PlayerBar({ state, onPause, onResume, onStop, onNext, onSeek, onShuffle, onRepeat, onCrossfade, connected, listenerCount, liked, onToggleLike }) {
+  const t = useT();
   const [dragRatio, setDragRatio] = useState(null); // 0-1 while the user is dragging the progress bar, else null
 
   // Volume is per-device (each speaker/browser tab controls its own), not
@@ -187,7 +188,7 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
     sleepTimerRef.current = setTimeout(() => {
       onPause();
       setSleepDeadline(null);
-      showToast('Minuteur de sommeil : lecture mise en pause');
+      showToast(t('player.sleepToast'));
     }, minutes * 60000);
     setShowSleepMenu(false);
   }
@@ -282,14 +283,14 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
       <button
         className={`control-button ${state.shuffle ? 'toggled' : ''}`}
         onClick={() => onShuffle(!state.shuffle)}
-        title={state.shuffle ? 'Désactiver la lecture aléatoire' : 'Lecture aléatoire'}
+        title={state.shuffle ? t('player.shuffleOff') : t('player.shuffleOn')}
       >
         <IconShuffle />
       </button>
       <button
         className={`control-button repeat-button ${state.repeat !== 'off' ? 'toggled' : ''}`}
         onClick={() => onRepeat(NEXT_REPEAT_MODE[state.repeat])}
-        title={REPEAT_TITLE[state.repeat]}
+        title={t(REPEAT_TITLE_KEY[state.repeat])}
       >
         <IconRepeat />
         {state.repeat === 'one' && <span className="repeat-one-badge">1</span>}
@@ -298,14 +299,14 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
         className="control-button play-pause"
         onClick={handlePlayPause}
         disabled={!state.track}
-        title={optimisticPlaying ? 'Pause' : 'Lecture'}
+        title={optimisticPlaying ? t('player.pause') : t('player.play')}
       >
         {optimisticPlaying ? <IconPause /> : <IconPlay />}
       </button>
-      <button className="control-button" onClick={onNext} disabled={upcomingCount === 0} title="Suivant">
+      <button className="control-button" onClick={onNext} disabled={upcomingCount === 0} title={t('player.next')}>
         <IconNext />
       </button>
-      <button className="control-button" onClick={onStop} disabled={!state.track} title="Arrêter">
+      <button className="control-button" onClick={onStop} disabled={!state.track} title={t('player.stop')}>
         <IconStop />
       </button>
     </div>
@@ -364,7 +365,7 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
             </div>
           </>
         ) : (
-          <span className="player-placeholder-text">Aucune piste en cours</span>
+          <span className="player-placeholder-text">{t('player.noTrack')}</span>
         )}
       </div>
 
@@ -374,9 +375,9 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
       </div>
 
       <div className="player-status">
-        {upcomingCount > 0 && <span className="queue-progress">{upcomingCount} à suivre</span>}
+        {upcomingCount > 0 && <span className="queue-progress">{t('player.upcoming', { count: upcomingCount })}</span>}
         <div className="volume-control">
-          <button className="icon-button" onClick={toggleMute} title={volume > 0 ? 'Couper le son' : 'Réactiver le son'}>
+          <button className="icon-button" onClick={toggleMute} title={volume > 0 ? t('player.mute') : t('player.unmute')}>
             {volume > 0 ? <IconVolume /> : <IconVolumeMute />}
           </button>
           <input
@@ -387,55 +388,60 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
             step="0.01"
             value={volume}
             onChange={(e) => setVolume(Number(e.target.value))}
-            title="Volume"
+            title={t('player.volume')}
           />
         </div>
         <div className="sleep-timer" ref={sleepMenuRef}>
           <button
             className={`icon-button ${sleepDeadline ? 'toggled' : ''}`}
             onClick={() => setShowSleepMenu((v) => !v)}
-            title={sleepDeadline ? `Minuteur de sommeil : ${sleepMinutesLeft} min restantes` : 'Minuteur de sommeil'}
+            title={
+              sleepDeadline ? t('player.sleepTimerActive', { minutes: sleepMinutesLeft }) : t('player.sleepTimer')
+            }
           >
             <IconTimer />
           </button>
           {showSleepMenu && (
             <div className="sleep-menu">
-              <span className="sleep-menu-header">Mettre en pause dans…</span>
+              <span className="sleep-menu-header">{t('player.sleepMenuHeader')}</span>
               {SLEEP_TIMER_OPTIONS.map((minutes) => (
                 <button key={minutes} onClick={() => startSleepTimer(minutes)}>
-                  {minutes} min
+                  {t('player.sleepMinutes', { minutes })}
                 </button>
               ))}
               {sleepDeadline && (
                 <button className="active" onClick={cancelSleepTimer}>
-                  Désactiver ({sleepMinutesLeft} min restantes)
+                  {t('player.sleepCancel', { minutes: sleepMinutesLeft })}
                 </button>
               )}
             </div>
           )}
         </div>
-        <span className="listener-count" title="Appareils connectés">
+        <span className="listener-count" title={t('player.listeners')}>
           <IconHeadphones /> {listenerCount}
         </span>
-        <button className="icon-button" onClick={() => setShowShortcuts((v) => !v)} title="Raccourcis clavier (?)">
+        <button className="icon-button" onClick={() => setShowShortcuts((v) => !v)} title={t('player.shortcutsTitle')}>
           <IconHelp />
         </button>
-        <span className={`connection-dot ${connected ? 'online' : 'offline'}`} title={connected ? 'Connecté' : 'Reconnexion…'} />
+        <span
+          className={`connection-dot ${connected ? 'online' : 'offline'}`}
+          title={connected ? t('player.connected') : t('player.reconnecting')}
+        />
       </div>
 
       {showShortcuts && (
         <div className="shortcuts-overlay" onClick={() => setShowShortcuts(false)}>
           <div className="shortcuts-panel" onClick={(e) => e.stopPropagation()}>
-            <h2>Raccourcis clavier</h2>
+            <h2>{t('shortcuts.title')}</h2>
             <dl>
-              {SHORTCUTS.map((s) => (
-                <div key={s.keys} className="shortcuts-row">
-                  <dt>{s.keys}</dt>
-                  <dd>{s.label}</dd>
+              {SHORTCUTS.map((shortcut) => (
+                <div key={shortcut.labelKey} className="shortcuts-row">
+                  <dt>{shortcut.keys ?? t(shortcut.keysKey)}</dt>
+                  <dd>{t(shortcut.labelKey)}</dd>
                 </div>
               ))}
             </dl>
-            <button className="icon-button shortcuts-close" onClick={() => setShowShortcuts(false)} title="Fermer">
+            <button className="icon-button shortcuts-close" onClick={() => setShowShortcuts(false)} title={t('common.close')}>
               ×
             </button>
           </div>
@@ -446,7 +452,7 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
         <div className="now-playing-overlay" onClick={() => setShowNowPlaying(false)}>
           {coverUrl && <div className="now-playing-bg" style={{ backgroundImage: `url(${coverUrl})` }} />}
           <div className="now-playing-panel" onClick={(e) => e.stopPropagation()}>
-            <button className="icon-button now-playing-close" onClick={() => setShowNowPlaying(false)} title="Fermer">
+            <button className="icon-button now-playing-close" onClick={() => setShowNowPlaying(false)} title={t('common.close')}>
               ×
             </button>
             {/* Vinyl treatment: circular, turning while playing, frozen mid-
@@ -472,7 +478,7 @@ export default function PlayerBar({ state, onPause, onResume, onStop, onNext, on
             <button
               className={`icon-button now-playing-like ${liked ? 'liked' : ''}`}
               onClick={() => onToggleLike(state.track.id, !liked)}
-              title={liked ? 'Retirer des titres likés' : 'Ajouter aux titres likés'}
+              title={liked ? t('track.unlike') : t('track.like')}
             >
               <IconHeart filled={liked} />
             </button>

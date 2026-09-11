@@ -461,6 +461,9 @@ select {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
+  /* Keeps this row's right-hand control (the list/albums/artists switch in
+     Library.jsx) clear of the settings gear fixed above it. */
+  padding-right: 48px;
 }
 
 .view-header-row h1 {
@@ -1792,6 +1795,34 @@ select {
 /* Mobile — off-canvas sidebar + toggle. Hidden/inert on desktop; the media
    query below is what actually turns the sidebar into a drawer. */
 
+/* Settings entry point, pinned to the top-right corner of the app on every
+   viewport (see App.jsx) — unlike .mobile-menu-toggle, which only exists on
+   narrow screens. The main content scrolls underneath it, so it sits above
+   the views but below the overlays (search, settings, ambient mode). */
+.settings-fab {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  z-index: 140;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.settings-fab:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+  transform: rotate(35deg);
+}
+
 .mobile-menu-toggle {
   display: none;
 }
@@ -2403,6 +2434,16 @@ select {
   background: var(--bg-main);
   border: 1px solid var(--border);
   border-radius: 5px;
+}
+
+.settings-select {
+  min-width: 150px;
+  padding: 6px 8px;
+  color: var(--text-primary);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 0.85rem;
 }
 
 .settings-reset {

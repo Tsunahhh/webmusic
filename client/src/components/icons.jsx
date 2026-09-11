@@ -276,3 +276,26 @@ export function IconMusicNote(props) {
     </svg>
   );
 }
+
+// The settings entry point (the gear pinned to the top-right of the app, see
+// App.jsx) — distinct from IconSliders, which stays on the panel's own
+// section rows.
+export function IconGear(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M19.4 15a1.6 1.6 0 00.32 1.77l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.6 1.6 0 00-1.77-.32 1.6 1.6 0 00-.97 1.47V21a2 2 0 11-4 0v-.11a1.6 1.6 0 00-1.05-1.47 1.6 1.6 0 00-1.77.32l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.6 1.6 0 004.82 15a1.6 1.6 0 00-1.47-.97H3a2 2 0 110-4h.11A1.6 1.6 0 004.58 9a1.6 1.6 0 00-.32-1.77l-.06-.06a2 2 0 112.83-2.83l.06.06a1.6 1.6 0 001.77.32H9a1.6 1.6 0 00.97-1.47V3a2 2 0 114 0v.11a1.6 1.6 0 00.97 1.47 1.6 1.6 0 001.77-.32l.06-.06a2 2 0 112.83 2.83l-.06.06a1.6 1.6 0 00-.32 1.77V9a1.6 1.6 0 001.47.97H21a2 2 0 110 4h-.11a1.6 1.6 0 00-1.47.97z" />
+    </svg>
+  );
+}
+
+// Sidebar "Library" nav item, so it reads as one of the destinations
+// alongside the queue/liked/history items rather than a bare word.
+export function IconLibrary(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 4v16M8 4v16" />
+      <path d="M12.5 5l4.5-1 3 15-4.5 1z" />
+    </svg>
+  );
+}
